@@ -8,11 +8,17 @@ W2F.Interaction = {
 }
 
 local function isLeftClickHeld()
-    return IsDisabledControlPressed(0, 24) or IsControlPressed(0, 24)
+    if (Config.CameraControl.holdButton or 'LEFT_CLICK') == 'LEFT_CLICK' then
+        return IsDisabledControlPressed(0, 24) or IsControlPressed(0, 24)
+    end
+    return false
 end
 
 local function wasLeftClickReleased()
-    return IsDisabledControlJustReleased(0, 24) or IsControlJustReleased(0, 24)
+    if (Config.CameraControl.holdButton or 'LEFT_CLICK') == 'LEFT_CLICK' then
+        return IsDisabledControlJustReleased(0, 24) or IsControlJustReleased(0, 24)
+    end
+    return false
 end
 
 function W2F.Interaction.UpdateCameraDrag()
@@ -34,15 +40,15 @@ function W2F.Interaction.UpdateCameraDrag()
             W2F.State.isDraggingCamera = true
             W2F.State.hasDraggedCamera = false
             W2F.Interaction.dragDistance = 0.0
-            W2F.Interaction.clickStart = GetGameTimer()
-            W2F.Interaction.clickStartPos = vector2(cursorX, cursorY)
+            W2F.State.dragStartX = cursorX
+            W2F.State.dragStartY = cursorY
             W2F.Interaction.lastMouseX = cursorX
             W2F.Interaction.lastMouseY = cursorY
         else
             local dx = cursorX - (W2F.Interaction.lastMouseX or cursorX)
             local dy = cursorY - (W2F.Interaction.lastMouseY or cursorY)
             W2F.Interaction.dragDistance = W2F.Interaction.dragDistance + math.abs(dx) + math.abs(dy)
-            if W2F.Interaction.dragDistance > Config.Interaction.dragThreshold then
+            if W2F.Interaction.dragDistance > (Config.CameraControl.dragThreshold or Config.Interaction.dragThreshold) then
                 W2F.State.hasDraggedCamera = true
             end
             W2F.Camera.ApplyDrag(dx, dy)
@@ -51,6 +57,8 @@ function W2F.Interaction.UpdateCameraDrag()
         end
     elseif wasLeftClickReleased() and W2F.State.isDraggingCamera then
         W2F.State.isDraggingCamera = false
+        W2F.State.dragStartX = nil
+        W2F.State.dragStartY = nil
         W2F.Interaction.lastMouseX = nil
         W2F.Interaction.lastMouseY = nil
     end
@@ -91,7 +99,7 @@ function W2F.Interaction.HandleClick()
         return
     end
 
-    if W2F.State.hasDraggedCamera or W2F.Interaction.dragDistance > Config.Interaction.dragThreshold then
+    if W2F.State.hasDraggedCamera or W2F.Interaction.dragDistance > (Config.CameraControl.dragThreshold or Config.Interaction.dragThreshold) then
         W2F.State.hasDraggedCamera = false
         W2F.Interaction.dragDistance = 0.0
         return
@@ -111,8 +119,6 @@ function W2F.Interaction.HandleClick()
 
     W2F.State.hasDraggedCamera = false
     W2F.Interaction.dragDistance = 0.0
-    W2F.Interaction.clickStart = nil
-    W2F.Interaction.clickStartPos = nil
 end
 
 function W2F.Interaction.DisableControls()

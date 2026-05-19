@@ -10,6 +10,8 @@ W2F.State = {
     isIntroPlaying = false,
     isDraggingCamera = false,
     hasDraggedCamera = false,
+    dragStartX = nil,
+    dragStartY = nil,
     hoveredPed = nil,
     hoveredSlot = nil,
     selectedPed = nil,
@@ -32,6 +34,8 @@ function W2F.ResetState()
     s.isIntroPlaying = false
     s.isDraggingCamera = false
     s.hasDraggedCamera = false
+    s.dragStartX = nil
+    s.dragStartY = nil
     s.hoveredPed = nil
     s.hoveredSlot = nil
     s.selectedPed = nil

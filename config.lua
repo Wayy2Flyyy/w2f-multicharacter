@@ -25,6 +25,7 @@ Config.Scene = {
 
 Config.CameraControl = {
     enabled = true,
+    holdButton = 'LEFT_CLICK',
     sensitivityX = 0.08,
     sensitivityY = 0.04,
     smoothing = 0.12,
@@ -39,6 +40,7 @@ Config.CameraControl = {
     defaultYaw = -10.0,
     defaultPitch = 4.0,
     settleSpeed = 0.08,
+    dragThreshold = 8,
     fov = 42.0,
     collisionProbe = true,
 }

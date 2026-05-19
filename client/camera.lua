@@ -184,8 +184,9 @@ end
 
 function W2F.Camera.Settle()
     local c = cfg()
-    W2F.Camera.targetYaw = W2F.SmoothStep(W2F.Camera.targetYaw, c.defaultYaw, c.settleSpeed)
-    W2F.Camera.targetPitch = W2F.SmoothStep(W2F.Camera.targetPitch, c.defaultPitch, c.settleSpeed)
+    local overview = (camCfg().overview or {})
+    W2F.Camera.targetYaw = W2F.SmoothStep(W2F.Camera.targetYaw, overview.yaw or c.defaultYaw, c.settleSpeed)
+    W2F.Camera.targetPitch = W2F.SmoothStep(W2F.Camera.targetPitch, overview.pitch or c.defaultPitch, c.settleSpeed)
 end
 
 function W2F.Camera.ApplyTransform(pos, focal, fov)
@@ -199,8 +200,8 @@ function W2F.Camera.ApplyTransform(pos, focal, fov)
     end
 end
 
-function W2F.Camera.UpdateOverview()
-    if not W2F.Camera.active or not W2F.Camera.handle or W2F.Camera.mode ~= 'overview' then
+function W2F.Camera.UpdateOrbitMode()
+    if not W2F.Camera.active or not W2F.Camera.handle then
         return
     end
     if W2F.State.isIntroPlaying then
@@ -210,7 +211,7 @@ function W2F.Camera.UpdateOverview()
     local c = cfg()
     local cc = camCfg()
     local smooth = cc.smoothing or c.smoothing
-    if not W2F.State.isDraggingCamera then
+    if W2F.Camera.mode == 'overview' and not W2F.State.isDraggingCamera then
         W2F.Camera.Settle()
         smooth = c.settleSpeed
     end
@@ -221,7 +222,7 @@ function W2F.Camera.UpdateOverview()
     W2F.Camera.currentFov = W2F.SmoothStep(W2F.Camera.currentFov, W2F.Camera.targetFov, smooth)
 
     local focal = W2F.Camera.focal
-    if cc.idleDrift then
+    if W2F.Camera.mode == 'overview' and cc.idleDrift then
         local t = GetGameTimer() * 0.001
         local drift = math.sin((t + W2F.Camera.driftSeed) * 0.35) * (cc.idleDriftStrength or 0.035)
         focal = vector3(focal.x, focal.y, focal.z + drift)
@@ -329,8 +330,8 @@ function W2F.Camera.Update()
         W2F.Camera.UpdateCinematic()
         return
     end
-    if W2F.Camera.mode == 'overview' then
-        W2F.Camera.UpdateOverview()
+    if W2F.Camera.mode == 'overview' or W2F.Camera.mode == 'focused' then
+        W2F.Camera.UpdateOrbitMode()
     end
 end
 
@@ -342,6 +343,7 @@ function W2F.Camera.FocusOnPed(ped)
     W2F.Camera.focal = vector3(pedCoords.x, pedCoords.y, pedCoords.z + (focus.height or 1.4))
     W2F.Camera.targetDistance = W2F.Clamp(focus.distance or 5.5, c.minDistance, c.maxDistance)
     W2F.Camera.targetFov = focus.fov or 35.0
+    W2F.Camera.targetPitch = W2F.Clamp(W2F.Camera.targetPitch, c.minPitch, c.maxPitch)
     W2F.Camera.mode = 'focused'
     syncModeState('focused')
 end
