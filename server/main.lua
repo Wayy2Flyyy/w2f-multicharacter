@@ -2,6 +2,10 @@ local function getPlayerLicense(source)
     return GetPlayerIdentifierByType(source, 'license2') or GetPlayerIdentifierByType(source, 'license')
 end
 
+local session = {}
+local SELECT_COOLDOWN_MS = 250
+local SPAWN_COOLDOWN_MS = 600
+
 local function decodeField(value)
     if type(value) == 'string' then
         local ok, decoded = pcall(json.decode, value)
@@ -32,26 +36,45 @@ local function getSpawnById(id)
     end
 end
 
-lib.callback.register('w2f-multicharacter:server:getCharacters', function(source)
-    local license = getPlayerLicense(source)
-    if not license then return {} end
+local function ensureSession(src)
+    if not session[src] then
+        session[src] = {
+            selectedCitizenid = nil,
+            lastSelectAt = 0,
+            lastSpawnAt = 0,
+        }
+    end
+    return session[src]
+end
 
+local function fetchCharactersByLicense(license)
     local rows = MySQL.query.await(
         'SELECT citizenid, cid, charinfo, money, job, metadata, position, gang FROM players WHERE license = ? ORDER BY cid ASC',
         { license }
     )
-
     if not rows or #rows == 0 then
         return {}
     end
-
     local list = {}
     for i = 1, #rows do
         local slot = rows[i].cid or i
         list[slot] = mapRow(rows[i], slot)
     end
-
     return list
+end
+
+local function ownsCitizenid(src, citizenid)
+    if not citizenid or citizenid == '' then return false end
+    local license = getPlayerLicense(src)
+    if not license then return false end
+    local row = MySQL.single.await('SELECT citizenid FROM players WHERE license = ? AND citizenid = ? LIMIT 1', { license, citizenid })
+    return row and row.citizenid ~= nil
+end
+
+lib.callback.register('w2f-multicharacter:server:getCharacters', function(source)
+    local license = getPlayerLicense(source)
+    if not license then return {} end
+    return fetchCharactersByLicense(license)
 end)
 
 lib.callback.register('w2f-multicharacter:server:getAppearance', function(_, citizenid)
@@ -87,7 +110,7 @@ lib.callback.register('w2f-multicharacter:server:getLastLocation', function(_, c
     return nil
 end)
 
-lib.callback.register('w2f-multicharacter:server:resolveSpawnById', function(_, spawnId, citizenid)
+local function resolveSpawnById(spawnId, citizenid)
     if type(spawnId) ~= 'string' or spawnId == '' then
         return nil
     end
@@ -120,6 +143,50 @@ lib.callback.register('w2f-multicharacter:server:resolveSpawnById', function(_, 
     end
 
     return nil
+end
+
+lib.callback.register('w2f-multicharacter:server:resolveSpawnById', function(_, spawnId, citizenid)
+    return resolveSpawnById(spawnId, citizenid)
+end)
+
+lib.callback.register('w2f-multicharacter:server:selectCharacter', function(source, citizenid)
+    local s = ensureSession(source)
+    local now = GetGameTimer()
+    if now - s.lastSelectAt < SELECT_COOLDOWN_MS then
+        if Config.Debug then print(('[w2f-multicharacter] selectCharacter cooldown src=%s'):format(source)) end
+        return false
+    end
+    s.lastSelectAt = now
+
+    if not ownsCitizenid(source, citizenid) then
+        if Config.Debug then print(('[w2f-multicharacter] selectCharacter denied src=%s citizenid=%s'):format(source, tostring(citizenid))) end
+        return false
+    end
+
+    s.selectedCitizenid = citizenid
+    return true
+end)
+
+lib.callback.register('w2f-multicharacter:server:requestSpawn', function(source, spawnId, citizenid)
+    local s = ensureSession(source)
+    local now = GetGameTimer()
+    if now - s.lastSpawnAt < SPAWN_COOLDOWN_MS then
+        if Config.Debug then print(('[w2f-multicharacter] requestSpawn cooldown src=%s'):format(source)) end
+        return nil
+    end
+    s.lastSpawnAt = now
+
+    if not ownsCitizenid(source, citizenid) then
+        if Config.Debug then print(('[w2f-multicharacter] requestSpawn denied ownership src=%s citizenid=%s'):format(source, tostring(citizenid))) end
+        return nil
+    end
+
+    if s.selectedCitizenid ~= citizenid then
+        if Config.Debug then print(('[w2f-multicharacter] requestSpawn denied selected mismatch src=%s'):format(source)) end
+        return nil
+    end
+
+    return resolveSpawnById(spawnId, citizenid)
 end)
 
 RegisterNetEvent('w2f-multicharacter:server:loadCharacter', function(character, _spawnCoords)
@@ -139,4 +206,8 @@ end)
 RegisterNetEvent('w2f-multicharacter:server:resetSelectionBucket', function()
     local src = source
     SetPlayerRoutingBucket(src, 0)
+end)
+
+AddEventHandler('playerDropped', function()
+    session[source] = nil
 end)

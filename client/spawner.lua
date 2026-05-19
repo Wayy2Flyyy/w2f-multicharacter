@@ -2,7 +2,7 @@ W2F.Spawner = {}
 
 function W2F.Spawner.ResolveSpawnCoords(spawnId, character)
     local citizenid = character and character.citizenid or nil
-    local resolved = lib.callback.await('w2f-multicharacter:server:resolveSpawnById', false, spawnId, citizenid)
+    local resolved = lib.callback.await('w2f-multicharacter:server:requestSpawn', false, spawnId, citizenid)
     if not resolved or not resolved.x then
         return nil
     end

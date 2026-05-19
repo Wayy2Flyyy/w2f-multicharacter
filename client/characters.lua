@@ -226,6 +226,13 @@ function W2F.Characters.SelectSlot(slot, entry)
     if W2F.State.selectedSlot == slot and W2F.State.selectedPed == entry.ped then
         return
     end
+    local citizenid = entry.character.citizenid
+    local accepted = lib.callback.await('w2f-multicharacter:server:selectCharacter', false, citizenid)
+    if not accepted then
+        W2F.PlayFrontendSound('ERROR')
+        return
+    end
+
     W2F.MarkPedClick()
     W2F.SetSelected(slot, entry.ped, entry.character)
     applySceneLighting(getProfileForCharacter(entry.character))
