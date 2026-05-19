@@ -11,16 +11,70 @@ Config.AutoOpen = true
 -- Character selection scene (ped lineup)
 Config.Scene = {
     pedSlots = {
-        vec4(-1360.8, -1486.1, 3.04, 208.0),
-        vec4(-1357.8, -1487.1, 3.07, 209.5),
-        vec4(-1354.7, -1488.0, 3.10, 211.0),
-        vec4(-1351.6, -1488.9, 3.07, 212.5),
-        vec4(-1348.6, -1489.9, 3.04, 214.0),
+        vec4(-1360.7, -1485.5, 3.04, 196.0),
+        vec4(-1358.1, -1486.9, 3.06, 204.0),
+        vec4(-1354.9, -1487.7, 3.10, 211.0),
+        vec4(-1351.7, -1487.0, 3.06, 218.0),
+        vec4(-1349.2, -1485.5, 3.04, 226.0),
     },
     introDurationMs = 2800,
     introStartHeight = 16.0,
     --- Extra height added to ped-center focal point for camera look-at
     focalHeightOffset = 0.85,
+}
+
+Config.SceneProfiles = {
+    neutral = {
+        lighting = 'clean',
+        animation = 'WORLD_HUMAN_STAND_IMPATIENT',
+        props = {},
+    },
+    police = {
+        lighting = 'emergency',
+        animation = 'WORLD_HUMAN_COP_IDLES',
+        props = {},
+    },
+    medical = {
+        lighting = 'medical',
+        animation = 'WORLD_HUMAN_CLIPBOARD',
+        props = {},
+    },
+    garage = {
+        lighting = 'garage',
+        animation = 'WORLD_HUMAN_HAMMERING',
+        props = {},
+    },
+    street = {
+        lighting = 'dark',
+        animation = 'WORLD_HUMAN_SMOKING',
+        props = {},
+    },
+    executive = {
+        lighting = 'clean',
+        animation = 'WORLD_HUMAN_STAND_MOBILE',
+        props = {},
+    },
+}
+
+Config.SceneJobMap = {
+    police = 'police',
+    sheriff = 'police',
+    state = 'police',
+    ambulance = 'medical',
+    ems = 'medical',
+    doctor = 'medical',
+    mechanic = 'garage',
+    tuner = 'garage',
+    gang = 'street',
+    ballas = 'street',
+    vagos = 'street',
+    families = 'street',
+    cartel = 'street',
+    unemployed = 'neutral',
+    realestate = 'executive',
+    lawyer = 'executive',
+    judge = 'executive',
+    casino = 'executive',
 }
 
 Config.CameraControl = {
