@@ -1,4 +1,10 @@
 W2F.Characters = {}
+local idleScenarios = {
+    'WORLD_HUMAN_STAND_IMPATIENT',
+    'WORLD_HUMAN_STAND_MOBILE',
+    'WORLD_HUMAN_HANG_OUT_STREET',
+    'WORLD_HUMAN_LEANING',
+}
 
 local function loadModel(model)
     local hash = type(model) == 'string' and joaat(model) or model
@@ -90,7 +96,8 @@ function W2F.Characters.SpawnPreviewPed(slotIndex, character)
     SetEntityCollision(ped, true, true)
 
     W2F.Qbox.ApplyAppearanceToPed(ped, hash, appearance)
-    TaskStartScenarioInPlace(ped, 'WORLD_HUMAN_STAND_IMPATIENT', 0, true)
+    local scenario = idleScenarios[((slotIndex - 1) % #idleScenarios) + 1]
+    TaskStartScenarioInPlace(ped, scenario, 0, true)
 
     W2F.State.previewPeds[slotIndex] = {
         ped = ped,

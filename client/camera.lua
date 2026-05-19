@@ -96,6 +96,7 @@ function W2F.Camera.Create(focal)
     SetCamActive(W2F.Camera.handle, true)
     RenderScriptCams(true, false, 0, true, true)
     W2F.Camera.active = true
+    W2F.State.cameraActive = true
     W2F.Camera.mode = 'overview'
 end
 
@@ -106,6 +107,7 @@ function W2F.Camera.Destroy()
     end
     W2F.Camera.handle = nil
     W2F.Camera.active = false
+    W2F.State.cameraActive = false
     W2F.Camera.cinematic = nil
     W2F.Camera.mode = 'overview'
 end
