@@ -7,6 +7,7 @@ const skySpawnGrid = document.getElementById('skySpawnGrid');
 const charName = document.getElementById('charName');
 const charJob = document.getElementById('charJob');
 const charCash = document.getElementById('charCash');
+const charSlot = document.getElementById('charSlot');
 const charBank = document.getElementById('charBank');
 const charPlaytime = document.getElementById('charPlaytime');
 const charLocation = document.getElementById('charLocation');
@@ -54,6 +55,7 @@ function showCharacterDetails(data) {
     charName.textContent = data.name || 'Unknown';
     charJob.textContent = data.job || 'Unemployed';
     charCash.textContent = data.cash || '$0';
+    charSlot.textContent = data.slot ? `#${data.slot}` : '—';
     charBank.textContent = data.bank || '$0';
     charPlaytime.textContent = data.playtime || '0m';
     charLocation.textContent = data.lastLocation || 'Unknown';
