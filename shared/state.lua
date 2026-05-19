@@ -3,6 +3,7 @@ W2F = W2F or {}
 ---@class W2FSelectionState
 W2F.State = {
     isInSelection = false,
+    isIntroPlaying = false,
     isDraggingCamera = false,
     hoveredPed = nil,
     hoveredSlot = nil,
@@ -21,6 +22,7 @@ W2F.State = {
 function W2F.ResetState()
     local s = W2F.State
     s.isInSelection = false
+    s.isIntroPlaying = false
     s.isDraggingCamera = false
     s.hoveredPed = nil
     s.hoveredSlot = nil

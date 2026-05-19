@@ -15,6 +15,7 @@ shared_scripts {
 
 client_scripts {
     'client/utils.lua',
+    'client/qbox.lua',
     'client/camera.lua',
     'client/characters.lua',
     'client/interaction.lua',
