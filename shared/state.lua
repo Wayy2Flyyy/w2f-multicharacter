@@ -19,6 +19,7 @@ W2F.State = {
     selectedSlot = nil,
     selectedCharacter = nil,
     detailsVisible = false,
+    isTransitioningToSky = false,
     isSkySpawnMode = false,
     selectedSpawn = nil,
     isSpawning = false,
@@ -46,6 +47,7 @@ function W2F.ResetState()
     s.selectedSlot = nil
     s.selectedCharacter = nil
     s.detailsVisible = false
+    s.isTransitioningToSky = false
     s.isSkySpawnMode = false
     s.selectedSpawn = nil
     s.isSpawning = false

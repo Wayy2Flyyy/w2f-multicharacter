@@ -22,7 +22,7 @@ local function wasLeftClickReleased()
 end
 
 function W2F.Interaction.UpdateCameraDrag()
-    if not W2F.State.isInSelection or W2F.State.isSkySpawnMode or W2F.State.isSpawning then
+    if not W2F.State.isInSelection or W2F.State.isSkySpawnMode or W2F.State.isSpawning or W2F.State.isTransitioningToSky then
         return
     end
     if W2F.Camera.mode ~= 'overview' or W2F.State.isIntroPlaying then
@@ -65,7 +65,7 @@ function W2F.Interaction.UpdateCameraDrag()
 end
 
 function W2F.Interaction.UpdatePedTargeting()
-    if not W2F.State.isInSelection or W2F.State.isSkySpawnMode or W2F.State.isSpawning then
+    if not W2F.State.isInSelection or W2F.State.isSkySpawnMode or W2F.State.isSpawning or W2F.State.isTransitioningToSky then
         return
     end
     if W2F.State.isDraggingCamera or W2F.State.isIntroPlaying then
@@ -89,7 +89,7 @@ function W2F.Interaction.UpdatePedTargeting()
 end
 
 function W2F.Interaction.HandleClick()
-    if not W2F.State.isInSelection or W2F.State.isSkySpawnMode or W2F.State.isSpawning then
+    if not W2F.State.isInSelection or W2F.State.isSkySpawnMode or W2F.State.isSpawning or W2F.State.isTransitioningToSky then
         return
     end
     if W2F.State.isIntroPlaying or W2F.State.isDraggingCamera then

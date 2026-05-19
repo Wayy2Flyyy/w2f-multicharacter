@@ -145,6 +145,7 @@ const handlers = {
         showCharacterDetails(data);
     },
     hideCharacterDetails: () => hideCharacterDetails(),
+    hideSelectionHints: () => setVisible(hint, false),
     showSkySpawnOptions: (data) => {
         showApp();
         showSkySpawnOptions(data);

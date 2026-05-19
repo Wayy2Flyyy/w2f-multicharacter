@@ -27,6 +27,7 @@ end
 
 function W2F.Spawner.RecoverFromFailedSpawn(message)
     W2F.State.isSpawning = false
+    W2F.State.isTransitioningToSky = false
     W2F.State.isSkySpawnMode = false
     W2F.Camera.cinematic = nil
     W2F.Camera.mode = 'overview'
@@ -48,15 +49,18 @@ function W2F.Spawner.RecoverFromFailedSpawn(message)
 end
 
 function W2F.Spawner.BeginSkySequence()
-    if W2F.State.isSpawning or not W2F.State.selectedCharacter then
+    if W2F.State.isSpawning or W2F.State.isTransitioningToSky or W2F.State.isSkySpawnMode or not W2F.State.selectedCharacter then
         return
     end
 
     W2F.State.isSpawning = true
+    W2F.State.isTransitioningToSky = true
     W2F.State.detailsVisible = false
+    W2F.SetHovered(nil, nil)
 
     W2F.SendNui('beginSpawnSequence', {})
     W2F.SendNui('hideCharacterDetails', {})
+    W2F.SendNui('hideSelectionHints', {})
 
     DoScreenFadeOut(400)
     while not IsScreenFadedOut() do Wait(0) end
@@ -83,6 +87,7 @@ function W2F.Spawner.BeginSkySequence()
             easing = W2F.EaseInOutCubic,
         },
     }, function()
+        W2F.State.isTransitioningToSky = false
         W2F.State.isSkySpawnMode = true
         W2F.Camera.mode = 'sky'
         W2F.SendNui('showSkySpawnOptions', {
@@ -93,7 +98,7 @@ function W2F.Spawner.BeginSkySequence()
 end
 
 function W2F.Spawner.FlyToSpawn(spawnId)
-    if not W2F.State.isSkySpawnMode or not W2F.State.selectedCharacter then
+    if W2F.State.isTransitioningToSky or not W2F.State.isSkySpawnMode or not W2F.State.selectedCharacter then
         return
     end
 
@@ -197,6 +202,7 @@ function W2F.Spawner.FinalizeSpawn(character, coords)
 
     W2F.Selection.active = false
     W2F.State.isInSelection = false
+    W2F.State.isTransitioningToSky = false
     W2F.State.isSpawning = false
     W2F.State.isSkySpawnMode = false
     W2F.ResetState()
