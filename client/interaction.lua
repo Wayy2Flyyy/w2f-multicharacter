@@ -65,6 +65,9 @@ function W2F.Interaction.UpdateCameraDrag()
 end
 
 function W2F.Interaction.UpdatePedTargeting()
+    if Config.Interaction.hoverEnabled == false then
+        return
+    end
     if not W2F.State.isInSelection or W2F.State.isSkySpawnMode or W2F.State.isSpawning or W2F.State.isTransitioningToSky then
         return
     end
@@ -89,6 +92,9 @@ function W2F.Interaction.UpdatePedTargeting()
 end
 
 function W2F.Interaction.HandleClick()
+    if Config.Interaction.selectionEnabled == false then
+        return
+    end
     if not W2F.State.isInSelection or W2F.State.isSkySpawnMode or W2F.State.isSpawning or W2F.State.isTransitioningToSky then
         return
     end

@@ -1,6 +1,13 @@
 Config = {}
 
-Config.Debug = false
+Config.General = {
+    Debug = false,
+    MaxCharacters = 5,
+    DefaultSlots = 5,
+    UseRoutingBuckets = true,
+}
+
+Config.Debug = Config.General.Debug
 
 --- Set true only when qbx_core/config/client.lua has characters.useExternalCharacters = true
 Config.UseExternalCharacters = true
@@ -112,10 +119,27 @@ Config.Camera = {
         height = 1.4,
         fov = 35.0,
     },
+    sky = {
+        height = 420.0,
+        fov = 50.0,
+    },
+    descent = {
+        endHeight = 28.0,
+        fovStart = 48.0,
+        fovEnd = 42.0,
+        rotationOffset = 15.0,
+    },
     smoothing = 0.12,
     idleDrift = true,
     idleDriftStrength = 0.035,
-    resetTime = 900,
+    resetSpeed = 0.08,
+    fov = {
+        overview = 42.0,
+        focus = 35.0,
+        sky = 50.0,
+        descent = 48.0,
+        ground = 42.0,
+    },
 }
 
 Config.Highlight = {
@@ -128,9 +152,21 @@ Config.Interaction = {
     rayMaxDistance = 14.0,
     pedSelectRadius = 1.45,
     dragThreshold = 8.0,
+    hoverEnabled = true,
+    selectionEnabled = true,
+    hoverDistance = 14.0,
+    hoverEffectStrength = 0.7,
+}
+
+Config.UI = {
+    hologramEnabled = true,
+    animationSpeed = 0.35,
+    detailsPosition = 'right',
+    showControlHints = true,
 }
 
 Config.SpawnCinematic = {
+    enabled = true,
     skyHeight = 420.0,
     skyRiseDurationMs = 2200,
     flyDurationMs = 4500,
@@ -178,7 +214,24 @@ Config.Spawns = {
 }
 
 Config.UseQbox = true
-Config.MaxCharacters = 5
+Config.MaxCharacters = Config.General.MaxCharacters
+
+Config.Spawn = {
+    skySpawnEnabled = true,
+    allowedSpawnPoints = { 'last', 'police', 'public', 'hospital' },
+    lastLocationFallback = 'public',
+    flyTimeMs = Config.SpawnCinematic.flyDurationMs,
+    freezeTimeMs = Config.SpawnCinematic.hoverDurationMs,
+    descentTimeMs = Config.SpawnCinematic.descendDurationMs,
+}
+
+Config.Scenes = {
+    jobMappings = Config.SceneJobMap,
+    fallbackScene = 'neutral',
+    lightingProfiles = Config.SceneProfiles,
+    animationProfiles = Config.SceneProfiles,
+    propLimits = 0,
+}
 
 --- Computes the camera look-at focal point from ped slot positions.
 function Config.GetSceneFocal()

@@ -139,9 +139,9 @@ function spawnFailed() {
 }
 
 const handlers = {
-    showSelection: () => {
+    showSelection: (data) => {
         showApp();
-        setVisible(hint, true);
+        setVisible(hint, data?.showControlHints !== false);
     },
     showCharacterDetails: (data) => {
         showApp();

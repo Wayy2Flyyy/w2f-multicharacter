@@ -162,7 +162,7 @@ end
 
 function W2F.Characters.FindPedNearRay(origin, direction)
     local bestSlot, bestEntry, bestDist = nil, nil, nil
-    local maxDist = Config.Interaction.rayMaxDistance
+    local maxDist = Config.Interaction.hoverDistance or Config.Interaction.rayMaxDistance
     local selectRadius = Config.Interaction.pedSelectRadius
 
     for slot, entry in pairs(W2F.State.previewPeds) do

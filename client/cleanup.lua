@@ -9,7 +9,9 @@ function W2F.Cleanup.ResetPlayerPed()
 end
 
 function W2F.Cleanup.ResetRoutingBucket()
-    TriggerServerEvent('w2f-multicharacter:server:resetSelectionBucket')
+    if Config.General.UseRoutingBuckets then
+        TriggerServerEvent('w2f-multicharacter:server:resetSelectionBucket')
+    end
 end
 
 function W2F.Cleanup.EndTutorialSession()
