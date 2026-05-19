@@ -11,11 +11,11 @@ Config.AutoOpen = true
 -- Character selection scene (ped lineup)
 Config.Scene = {
     pedSlots = {
-        vec4(-1360.2, -1485.5, 3.04, 210.0),
-        vec4(-1357.1, -1486.8, 3.04, 210.0),
-        vec4(-1354.0, -1488.1, 3.04, 210.0),
-        vec4(-1350.9, -1489.4, 3.04, 210.0),
-        vec4(-1347.8, -1490.7, 3.04, 210.0),
+        vec4(-1360.8, -1486.1, 3.04, 208.0),
+        vec4(-1357.8, -1487.1, 3.07, 209.5),
+        vec4(-1354.7, -1488.0, 3.10, 211.0),
+        vec4(-1351.6, -1488.9, 3.07, 212.5),
+        vec4(-1348.6, -1489.9, 3.04, 214.0),
     },
     introDurationMs = 2800,
     introStartHeight = 16.0,
@@ -36,11 +36,30 @@ Config.CameraControl = {
     maxDistance = 11.0,
     defaultDistance = 9.0,
     --- Slight diagonal in front of lineup (premium showcase angle)
-    defaultYaw = -12.0,
-    defaultPitch = 5.0,
+    defaultYaw = -10.0,
+    defaultPitch = 4.0,
     settleSpeed = 0.08,
     fov = 42.0,
     collisionProbe = true,
+}
+
+Config.Camera = {
+    overview = {
+        distance = 9.0,
+        height = 1.8,
+        fov = 42.0,
+        yaw = 0.0,
+        pitch = 4.0,
+    },
+    focus = {
+        distance = 5.5,
+        height = 1.4,
+        fov = 35.0,
+    },
+    smoothing = 0.12,
+    idleDrift = true,
+    idleDriftStrength = 0.035,
+    resetTime = 900,
 }
 
 Config.Highlight = {

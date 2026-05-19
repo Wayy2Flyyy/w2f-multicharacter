@@ -1,4 +1,10 @@
 W2F.Characters = {}
+local idleScenarios = {
+    'WORLD_HUMAN_STAND_IMPATIENT',
+    'WORLD_HUMAN_STAND_MOBILE',
+    'WORLD_HUMAN_HANG_OUT_STREET',
+    'WORLD_HUMAN_LEANING',
+}
 
 local function loadModel(model)
     local hash = type(model) == 'string' and joaat(model) or model
@@ -90,7 +96,8 @@ function W2F.Characters.SpawnPreviewPed(slotIndex, character)
     SetEntityCollision(ped, true, true)
 
     W2F.Qbox.ApplyAppearanceToPed(ped, hash, appearance)
-    TaskStartScenarioInPlace(ped, 'WORLD_HUMAN_STAND_IMPATIENT', 0, true)
+    local scenario = idleScenarios[((slotIndex - 1) % #idleScenarios) + 1]
+    TaskStartScenarioInPlace(ped, scenario, 0, true)
 
     W2F.State.previewPeds[slotIndex] = {
         ped = ped,
@@ -178,6 +185,7 @@ function W2F.Characters.SelectSlot(slot, entry)
     if not entry or not entry.character then return end
     W2F.MarkClick()
     W2F.SetSelected(slot, entry.ped, entry.character)
+    W2F.Camera.FocusOnPed(entry.ped)
     W2F.Characters.RefreshHighlights()
     W2F.SendNui('showCharacterDetails', W2F.Characters.GetDetailsPayload(entry.character))
     W2F.SendNui('updateSelectedPed', { slot = slot })
@@ -185,6 +193,7 @@ end
 
 function W2F.Characters.ClearSelection()
     W2F.SetSelected(nil, nil, nil)
+    W2F.Camera.ReturnToOverview()
     W2F.Characters.RefreshHighlights()
     W2F.SendNui('hideCharacterDetails', {})
     W2F.SendNui('updateSelectedPed', { slot = nil })
