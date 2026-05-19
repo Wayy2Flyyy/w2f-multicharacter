@@ -2,8 +2,8 @@ W2F.Interaction = {
     lastMouseX = nil,
     lastMouseY = nil,
     dragDistance = 0.0,
-    clickStart = nil,
-    clickStartPos = nil,
+    lastHoverUpdateAt = 0,
+    hoverIntervalMs = 45,
     loopRunning = false,
 }
 
@@ -74,6 +74,12 @@ function W2F.Interaction.UpdatePedTargeting()
     if W2F.State.isDraggingCamera or W2F.State.isIntroPlaying then
         return
     end
+
+    local now = GetGameTimer()
+    if (now - W2F.Interaction.lastHoverUpdateAt) < W2F.Interaction.hoverIntervalMs then
+        return
+    end
+    W2F.Interaction.lastHoverUpdateAt = now
 
     local origin, direction = W2F.ScreenToWorldRay()
     local slot, entry = W2F.Characters.FindPedNearRay(origin, direction)
@@ -153,7 +159,15 @@ function W2F.Interaction.StartLoop()
             end
 
             W2F.Camera.Update()
-            Wait(0)
+            local waitMs = 0
+            if W2F.State.isIntroPlaying then
+                waitMs = 0
+            elseif W2F.State.isDraggingCamera or W2F.State.isSkySpawnMode or W2F.State.isTransitioningToSky then
+                waitMs = 0
+            else
+                waitMs = 5
+            end
+            Wait(waitMs)
         end
         W2F.Interaction.loopRunning = false
     end)

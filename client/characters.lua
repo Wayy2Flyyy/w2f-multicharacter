@@ -59,6 +59,11 @@ local function resolveModel(character)
     end
 
     local appearance
+    local cid = character and character.citizenid or nil
+    if cid and W2F.State.modelCache[cid] then
+        return W2F.State.modelCache[cid], W2F.State.appearanceCache[cid]
+    end
+
     if character and character.citizenid and W2F.Qbox.IsActive() then
         local qbxModel, qbxAppearance = W2F.Qbox.GetPreviewPedData(character.citizenid)
         if qbxModel then
@@ -72,6 +77,11 @@ local function resolveModel(character)
         end
     end
 
+    if cid then
+        W2F.State.modelCache[cid] = model
+        W2F.State.appearanceCache[cid] = appearance
+    end
+
     return model, appearance
 end
 
@@ -83,6 +93,8 @@ function W2F.Characters.ClearPreviewPeds()
         end
     end
     W2F.State.previewPeds = {}
+    W2F.State.hoveredPed = nil
+    W2F.State.selectedPed = nil
 end
 
 function W2F.Characters.ApplyHighlight(ped, mode)

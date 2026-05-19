@@ -30,6 +30,8 @@ W2F.State = {
     lastPedClickTime = 0,
     characters = {},
     previewPeds = {},
+    appearanceCache = {},
+    modelCache = {},
 }
 
 function W2F.ResetState()
@@ -58,6 +60,8 @@ function W2F.ResetState()
     s.lastPedClickTime = 0
     s.characters = {}
     s.previewPeds = {}
+    s.appearanceCache = {}
+    s.modelCache = {}
 end
 
 function W2F.SetHovered(slot, ped)
