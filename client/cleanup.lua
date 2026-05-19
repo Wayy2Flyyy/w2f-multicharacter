@@ -9,8 +9,8 @@ function W2F.Cleanup.ResetPlayerPed()
 end
 
 function W2F.Cleanup.ResetRoutingBucket()
-    if SetPlayerRoutingBucket then
-        SetPlayerRoutingBucket(PlayerId(), 0)
+    if Config.General.UseRoutingBuckets then
+        TriggerServerEvent('w2f-multicharacter:server:resetSelectionBucket')
     end
 end
 
@@ -25,6 +25,12 @@ function W2F.Cleanup.Visuals()
     W2F.Camera.Destroy()
     ClearTimecycleModifier()
     pcall(function() ClearExtraTimecycleModifier() end)
+    if AnimpostfxIsRunning('DeathFailOut') then
+        StopScreenEffect('DeathFailOut')
+    end
+    if IsScreenFadedOut() then
+        DoScreenFadeIn(250)
+    end
     W2F.SetSelectionFocus(false, false)
     W2F.SendNui('resetSelectionUI', {})
 end
