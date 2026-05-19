@@ -100,8 +100,8 @@ function W2F.Spawner.FlyToSpawn(spawnId)
     local sky = Config.SpawnCinematic
     local camPos = W2F.Camera.GetCurrentCoord()
     local aboveTarget = vector3(coords.x, coords.y, coords.z + sky.flyHeight)
-    local hoverTarget = vector3(coords.x, coords.y, coords.z + sky.descendEndHeight + 40.0)
     local groundLook = vector3(coords.x, coords.y, coords.z)
+    local travelDistance = #(aboveTarget - camPos)
 
     W2F.PlayFrontendSound('WAYPOINT_SET')
 
@@ -111,6 +111,15 @@ function W2F.Spawner.FlyToSpawn(spawnId)
     end
 
     W2F.Camera.mode = 'cinematic'
+    if travelDistance > (sky.travelFadeDistance or 2600.0) then
+        DoScreenFadeOut(sky.travelFadeOutMs or 320)
+        while not IsScreenFadedOut() do Wait(0) end
+        SetCamCoord(W2F.Camera.handle, aboveTarget.x, aboveTarget.y, aboveTarget.z)
+        W2F.Camera.SetRotation(W2F.Camera.handle, W2F.Camera.GetLookAtRotation(aboveTarget, groundLook))
+        SetCamFov(W2F.Camera.handle, sky.fovSky)
+        DoScreenFadeIn(sky.travelFadeInMs or 420)
+    end
+
     W2F.Camera.RunCinematic({
         {
             mode = 'flyToSpawn',
@@ -125,7 +134,7 @@ function W2F.Spawner.FlyToSpawn(spawnId)
         {
             mode = 'sky',
             from = aboveTarget,
-            to = hoverTarget,
+            to = aboveTarget,
             lookAt = groundLook,
             duration = sky.hoverDurationMs,
             fovFrom = sky.fovSky,
@@ -134,7 +143,7 @@ function W2F.Spawner.FlyToSpawn(spawnId)
         },
         {
             mode = 'descent',
-            from = hoverTarget,
+            from = aboveTarget,
             to = vector3(coords.x + 2.0, coords.y + 2.0, coords.z + 6.0),
             lookAt = groundLook,
             duration = sky.descendDurationMs,

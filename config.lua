@@ -143,6 +143,9 @@ Config.SpawnCinematic = {
     fovGround = 42.0,
     fadeOutMs = 800,
     fadeInMs = 900,
+    travelFadeDistance = 2600.0,
+    travelFadeOutMs = 320,
+    travelFadeInMs = 420,
     soundHooks = true,
 }
 
