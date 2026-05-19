@@ -1,4 +1,47 @@
 W2F.Characters = {}
+W2F.Characters.activeSceneProfile = 'neutral'
+local fallbackScenarios = {
+    'WORLD_HUMAN_STAND_IMPATIENT',
+    'WORLD_HUMAN_STAND_MOBILE',
+    'WORLD_HUMAN_HANG_OUT_STREET',
+    'WORLD_HUMAN_LEANING',
+}
+
+local function getProfileForCharacter(character)
+    local defaultProfile = 'neutral'
+    if not character then return defaultProfile end
+    local job = character.job or {}
+    local jobName = string.lower(tostring(job.name or job.type or 'unemployed'))
+    local mapped = Config.SceneJobMap and Config.SceneJobMap[jobName]
+    if mapped and Config.SceneProfiles and Config.SceneProfiles[mapped] then
+        return mapped
+    end
+    return defaultProfile
+end
+
+local function applySceneLighting(profileName)
+    local profile = Config.SceneProfiles and Config.SceneProfiles[profileName]
+    local lighting = profile and profile.lighting or 'clean'
+
+    if lighting == 'emergency' then
+        SetTimecycleModifier('MP_corona_heist_blend')
+        SetTimecycleModifierStrength(0.30)
+    elseif lighting == 'medical' then
+        SetTimecycleModifier('int_hospital2_dm')
+        SetTimecycleModifierStrength(0.24)
+    elseif lighting == 'garage' then
+        SetTimecycleModifier('int_carrier_hanger')
+        SetTimecycleModifierStrength(0.20)
+    elseif lighting == 'dark' then
+        SetTimecycleModifier('V_FIB_IT3')
+        SetTimecycleModifierStrength(0.32)
+    else
+        SetTimecycleModifier('MP_corona_heist_blend')
+        SetTimecycleModifierStrength(0.22)
+    end
+
+    W2F.Characters.activeSceneProfile = profileName or 'neutral'
+end
 
 local function loadModel(model)
     local hash = type(model) == 'string' and joaat(model) or model
@@ -90,7 +133,10 @@ function W2F.Characters.SpawnPreviewPed(slotIndex, character)
     SetEntityCollision(ped, true, true)
 
     W2F.Qbox.ApplyAppearanceToPed(ped, hash, appearance)
-    TaskStartScenarioInPlace(ped, 'WORLD_HUMAN_STAND_IMPATIENT', 0, true)
+    local profileName = getProfileForCharacter(character)
+    local profile = Config.SceneProfiles and Config.SceneProfiles[profileName]
+    local scenario = (profile and profile.animation) or fallbackScenarios[((slotIndex - 1) % #fallbackScenarios) + 1]
+    TaskStartScenarioInPlace(ped, scenario, 0, true)
 
     W2F.State.previewPeds[slotIndex] = {
         ped = ped,
@@ -105,6 +151,7 @@ end
 function W2F.Characters.BuildLineup(characters)
     W2F.Characters.ClearPreviewPeds()
     W2F.State.characters = characters or {}
+    applySceneLighting('neutral')
 
     for slot, character in pairs(characters) do
         if type(slot) == 'number' and character then
@@ -178,6 +225,8 @@ function W2F.Characters.SelectSlot(slot, entry)
     if not entry or not entry.character then return end
     W2F.MarkClick()
     W2F.SetSelected(slot, entry.ped, entry.character)
+    applySceneLighting(getProfileForCharacter(entry.character))
+    W2F.Camera.FocusOnPed(entry.ped)
     W2F.Characters.RefreshHighlights()
     W2F.SendNui('showCharacterDetails', W2F.Characters.GetDetailsPayload(entry.character))
     W2F.SendNui('updateSelectedPed', { slot = slot })
@@ -185,6 +234,8 @@ end
 
 function W2F.Characters.ClearSelection()
     W2F.SetSelected(nil, nil, nil)
+    applySceneLighting('neutral')
+    W2F.Camera.ReturnToOverview()
     W2F.Characters.RefreshHighlights()
     W2F.SendNui('hideCharacterDetails', {})
     W2F.SendNui('updateSelectedPed', { slot = nil })

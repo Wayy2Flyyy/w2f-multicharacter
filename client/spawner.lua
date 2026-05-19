@@ -73,11 +73,12 @@ function W2F.Spawner.BeginSkySequence()
 
     W2F.Camera.RunCinematic({
         {
+            mode = 'sky',
             from = camPos,
             to = skyPos,
             lookAt = focal,
             duration = sky.skyRiseDurationMs,
-            fovFrom = Config.CameraControl.fov,
+            fovFrom = (Config.Camera and Config.Camera.overview and Config.Camera.overview.fov) or Config.CameraControl.fov,
             fovTo = sky.fovSky,
             easing = W2F.EaseInOutCubic,
         },
@@ -123,6 +124,7 @@ function W2F.Spawner.FlyToSpawn(spawnId)
     W2F.Camera.mode = 'cinematic'
     W2F.Camera.RunCinematic({
         {
+            mode = 'flyToSpawn',
             from = camPos,
             to = aboveTarget,
             lookAt = groundLook,
@@ -132,6 +134,7 @@ function W2F.Spawner.FlyToSpawn(spawnId)
             easing = W2F.EaseInOutCubic,
         },
         {
+            mode = 'sky',
             from = aboveTarget,
             to = hoverTarget,
             lookAt = groundLook,
@@ -141,6 +144,7 @@ function W2F.Spawner.FlyToSpawn(spawnId)
             easing = W2F.EaseOutCubic,
         },
         {
+            mode = 'descent',
             from = hoverTarget,
             to = vector3(coords.x + 2.0, coords.y + 2.0, coords.z + 6.0),
             lookAt = groundLook,
