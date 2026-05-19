@@ -185,6 +185,7 @@ function W2F.Characters.SelectSlot(slot, entry)
     if not entry or not entry.character then return end
     W2F.MarkClick()
     W2F.SetSelected(slot, entry.ped, entry.character)
+    W2F.Camera.FocusOnPed(entry.ped)
     W2F.Characters.RefreshHighlights()
     W2F.SendNui('showCharacterDetails', W2F.Characters.GetDetailsPayload(entry.character))
     W2F.SendNui('updateSelectedPed', { slot = slot })
@@ -192,6 +193,7 @@ end
 
 function W2F.Characters.ClearSelection()
     W2F.SetSelected(nil, nil, nil)
+    W2F.Camera.ReturnToOverview()
     W2F.Characters.RefreshHighlights()
     W2F.SendNui('hideCharacterDetails', {})
     W2F.SendNui('updateSelectedPed', { slot = nil })

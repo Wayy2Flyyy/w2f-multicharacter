@@ -43,6 +43,25 @@ Config.CameraControl = {
     collisionProbe = true,
 }
 
+Config.Camera = {
+    overview = {
+        distance = 9.0,
+        height = 1.8,
+        fov = 42.0,
+        yaw = 0.0,
+        pitch = 4.0,
+    },
+    focus = {
+        distance = 5.5,
+        height = 1.4,
+        fov = 35.0,
+    },
+    smoothing = 0.12,
+    idleDrift = true,
+    idleDriftStrength = 0.035,
+    resetTime = 900,
+}
+
 Config.Highlight = {
     outlineColor = { r = 255, g = 255, b = 255 },
     selectedColor = { r = 120, g = 200, b = 255 },

@@ -12,10 +12,37 @@ W2F.Camera = {
     targetFov = 42.0,
     mode = 'overview',
     cinematic = nil,
+    driftSeed = 0.0,
+    modeState = {
+        overview = true,
+        focused = false,
+        sky = false,
+        flyToSpawn = false,
+        descent = false,
+    },
 }
 
 local function cfg()
     return Config.CameraControl
+end
+
+local function camCfg()
+    return Config.Camera or {}
+end
+
+local function getOverviewFocal()
+    local focal = Config.GetSceneFocal()
+    local overview = (camCfg().overview or {})
+    return vector3(focal.x, focal.y, focal.z + (overview.height or 0.0))
+end
+
+local function syncModeState(mode)
+    local state = W2F.Camera.modeState
+    state.overview = mode == 'overview'
+    state.focused = mode == 'focused'
+    state.sky = mode == 'sky'
+    state.flyToSpawn = mode == 'flyToSpawn'
+    state.descent = mode == 'descent'
 end
 
 function W2F.Camera.SetRotation(cam, rot)
@@ -78,26 +105,34 @@ function W2F.Camera.Create(focal)
     W2F.Camera.Destroy()
     W2F.Camera.focal = focal
     local c = cfg()
-    local distance = Config.GetRecommendedCameraDistance()
-    W2F.Camera.currentYaw = c.defaultYaw
-    W2F.Camera.currentPitch = c.defaultPitch
+    local cc = camCfg()
+    local overview = cc.overview or {}
+    local distance = W2F.Clamp(
+        overview.distance or Config.GetRecommendedCameraDistance(),
+        c.minDistance,
+        c.maxDistance
+    )
+    W2F.Camera.currentYaw = overview.yaw or c.defaultYaw
+    W2F.Camera.currentPitch = overview.pitch or c.defaultPitch
     W2F.Camera.currentDistance = distance
-    W2F.Camera.targetYaw = c.defaultYaw
-    W2F.Camera.targetPitch = c.defaultPitch
+    W2F.Camera.targetYaw = overview.yaw or c.defaultYaw
+    W2F.Camera.targetPitch = overview.pitch or c.defaultPitch
     W2F.Camera.targetDistance = distance
-    W2F.Camera.currentFov = c.fov
-    W2F.Camera.targetFov = c.fov
+    W2F.Camera.currentFov = overview.fov or c.fov
+    W2F.Camera.targetFov = overview.fov or c.fov
 
-    local pos = W2F.Camera.GetOrbitPosition(focal, distance, c.defaultYaw, c.defaultPitch)
+    local pos = W2F.Camera.GetOrbitPosition(focal, distance, W2F.Camera.currentYaw, W2F.Camera.currentPitch)
     W2F.Camera.handle = CreateCam('DEFAULT_SCRIPTED_CAMERA', true)
     SetCamCoord(W2F.Camera.handle, pos.x, pos.y, pos.z)
     W2F.Camera.SetRotation(W2F.Camera.handle, W2F.Camera.GetLookAtRotation(pos, focal))
-    SetCamFov(W2F.Camera.handle, c.fov)
+    SetCamFov(W2F.Camera.handle, W2F.Camera.currentFov)
     SetCamActive(W2F.Camera.handle, true)
     RenderScriptCams(true, false, 0, true, true)
     W2F.Camera.active = true
     W2F.State.cameraActive = true
     W2F.Camera.mode = 'overview'
+    syncModeState('overview')
+    W2F.Camera.driftSeed = GetGameTimer() * 0.001
 end
 
 function W2F.Camera.Destroy()
@@ -110,13 +145,21 @@ function W2F.Camera.Destroy()
     W2F.State.cameraActive = false
     W2F.Camera.cinematic = nil
     W2F.Camera.mode = 'overview'
+    syncModeState('overview')
 end
 
 function W2F.Camera.ResetTargets()
     local c = cfg()
-    W2F.Camera.targetYaw = c.defaultYaw
-    W2F.Camera.targetPitch = c.defaultPitch
-    W2F.Camera.targetDistance = Config.GetRecommendedCameraDistance()
+    local cc = camCfg()
+    local overview = cc.overview or {}
+    W2F.Camera.targetYaw = overview.yaw or c.defaultYaw
+    W2F.Camera.targetPitch = overview.pitch or c.defaultPitch
+    W2F.Camera.targetDistance = W2F.Clamp(
+        overview.distance or Config.GetRecommendedCameraDistance(),
+        c.minDistance,
+        c.maxDistance
+    )
+    W2F.Camera.targetFov = overview.fov or c.fov
 end
 
 function W2F.Camera.ApplyDrag(deltaX, deltaY)
@@ -165,7 +208,8 @@ function W2F.Camera.UpdateOverview()
     end
 
     local c = cfg()
-    local smooth = c.smoothing
+    local cc = camCfg()
+    local smooth = cc.smoothing or c.smoothing
     if not W2F.State.isDraggingCamera then
         W2F.Camera.Settle()
         smooth = c.settleSpeed
@@ -177,6 +221,11 @@ function W2F.Camera.UpdateOverview()
     W2F.Camera.currentFov = W2F.SmoothStep(W2F.Camera.currentFov, W2F.Camera.targetFov, smooth)
 
     local focal = W2F.Camera.focal
+    if cc.idleDrift then
+        local t = GetGameTimer() * 0.001
+        local drift = math.sin((t + W2F.Camera.driftSeed) * 0.35) * (cc.idleDriftStrength or 0.035)
+        focal = vector3(focal.x, focal.y, focal.z + drift)
+    end
     local desired = W2F.Camera.GetOrbitPosition(
         focal,
         W2F.Camera.currentDistance,
@@ -188,15 +237,23 @@ end
 
 function W2F.Camera.PlayIntro()
     local scene = Config.Scene
-    local focal = Config.GetSceneFocal()
+    local focal = getOverviewFocal()
     local c = cfg()
-    local distance = Config.GetRecommendedCameraDistance()
-    local endPos = W2F.Camera.GetOrbitPosition(focal, distance, c.defaultYaw, c.defaultPitch)
+    local cc = camCfg()
+    local overview = cc.overview or {}
+    local distance = W2F.Clamp(
+        overview.distance or Config.GetRecommendedCameraDistance(),
+        c.minDistance,
+        c.maxDistance
+    )
+    local yaw = overview.yaw or c.defaultYaw
+    local pitch = overview.pitch or c.defaultPitch
+    local endPos = W2F.Camera.GetOrbitPosition(focal, distance, yaw, pitch)
     local startPos = vector3(endPos.x, endPos.y, endPos.z + scene.introStartHeight)
 
     W2F.State.isIntroPlaying = true
     W2F.Camera.Create(focal)
-    W2F.Camera.ApplyTransform(startPos, focal, c.fov)
+    W2F.Camera.ApplyTransform(startPos, focal, overview.fov or c.fov)
 
     local startTime = GetGameTimer()
     local duration = scene.introDurationMs
@@ -207,7 +264,7 @@ function W2F.Camera.PlayIntro()
             local t = W2F.Clamp(elapsed / duration, 0.0, 1.0)
             local eased = W2F.EaseOutCubic(t)
             local pos = W2F.Vec3Lerp(startPos, endPos, eased)
-            W2F.Camera.ApplyTransform(pos, focal, c.fov)
+            W2F.Camera.ApplyTransform(pos, focal, overview.fov or c.fov)
             if t >= 1.0 then
                 break
             end
@@ -218,7 +275,9 @@ function W2F.Camera.PlayIntro()
 end
 
 function W2F.Camera.RunCinematic(sequence, onComplete)
-    W2F.Camera.mode = 'cinematic'
+    local first = sequence and sequence[1]
+    W2F.Camera.mode = (first and first.mode) or 'flyToSpawn'
+    syncModeState(W2F.Camera.mode)
     W2F.Camera.cinematic = {
         sequence = sequence,
         index = 1,
@@ -275,6 +334,25 @@ function W2F.Camera.Update()
     end
 end
 
+function W2F.Camera.FocusOnPed(ped)
+    if not ped or not DoesEntityExist(ped) or not W2F.Camera.active then return end
+    local focus = (camCfg().focus or {})
+    local c = cfg()
+    local pedCoords = GetEntityCoords(ped)
+    W2F.Camera.focal = vector3(pedCoords.x, pedCoords.y, pedCoords.z + (focus.height or 1.4))
+    W2F.Camera.targetDistance = W2F.Clamp(focus.distance or 5.5, c.minDistance, c.maxDistance)
+    W2F.Camera.targetFov = focus.fov or 35.0
+    W2F.Camera.mode = 'focused'
+    syncModeState('focused')
+end
+
+function W2F.Camera.ReturnToOverview()
+    W2F.Camera.focal = getOverviewFocal()
+    W2F.Camera.ResetTargets()
+    W2F.Camera.mode = 'overview'
+    syncModeState('overview')
+end
+
 function W2F.Camera.GetCurrentCoord()
     if W2F.Camera.handle and DoesCamExist(W2F.Camera.handle) then
         return GetCamCoord(W2F.Camera.handle)
@@ -288,3 +366,7 @@ function W2F.Camera.GetRenderedTransform()
     end
     return GetGameplayCamCoord(), GetGameplayCamRot(2)
 end
+    if step.mode and W2F.Camera.mode ~= step.mode then
+        W2F.Camera.mode = step.mode
+        syncModeState(step.mode)
+    end
