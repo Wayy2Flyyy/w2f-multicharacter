@@ -1,5 +1,3 @@
-local selectionActive = false
-
 local function preparePlayer()
     local ped = cache.ped or PlayerPedId()
     local focal = Config.GetSceneFocal()
@@ -19,15 +17,22 @@ local function beginTutorialSession()
     end
 end
 
+local function setSelectionBucket()
+    if SetPlayerRoutingBucket then
+        SetPlayerRoutingBucket(PlayerId(), PlayerId())
+    end
+end
+
 function W2F.EnterSelection()
-    if selectionActive then return end
-    selectionActive = true
+    if W2F.Selection.active then return end
+    W2F.Selection.active = true
 
     W2F.ResetState()
     W2F.State.isInSelection = true
 
     preparePlayer()
     beginTutorialSession()
+    setSelectionBucket()
 
     ShutdownLoadingScreen()
     ShutdownLoadingScreenNui()
@@ -40,8 +45,9 @@ function W2F.EnterSelection()
 
     SetTimecycleModifier('MP_corona_heist_blend')
     SetTimecycleModifierStrength(0.22)
+    DisplayRadar(false)
 
-    W2F.SetSelectionFocus(true)
+    W2F.SetSelectionFocus(true, true) -- cursor on, game input for ped clicks
     W2F.SendNui('showSelection', { maxSlots = #Config.Scene.pedSlots })
     W2F.SendNui('hideCharacterDetails', {})
     W2F.SendNui('hideSkySpawnOptions', {})
@@ -50,22 +56,12 @@ function W2F.EnterSelection()
     W2F.Interaction.StartLoop()
 
     DoScreenFadeIn(800)
-    W2F.Debug('Selection started with %s slots filled', tostring(#characters))
+    W2F.Debug('Selection session started')
 end
 
-function W2F.ExitSelection()
-    selectionActive = false
-    W2F.Spawner.CleanupVisuals()
-    W2F.ResetState()
-
-    if NetworkIsInTutorialSession() then
-        NetworkEndTutorialSession()
-    end
-
-    local ped = cache.ped or PlayerPedId()
-    SetEntityInvincible(ped, false)
-    FreezeEntityPosition(ped, false)
-    SetEntityCollision(ped, true, true)
+function W2F.CloseSelection()
+    W2F.Selection.active = false
+    W2F.Cleanup.Full(true)
 end
 
 RegisterNetEvent('w2f-multicharacter:client:openSelection', function()
@@ -92,7 +88,7 @@ CreateThread(function()
     end
 
     if not Config.UseExternalCharacters then
-        print('[w2f-multicharacter] Set Config.UseExternalCharacters = true and enable qbx_core characters.useExternalCharacters')
+        print('[w2f-multicharacter] Enable qbx_core characters.useExternalCharacters and Config.UseExternalCharacters')
         return
     end
 
@@ -102,5 +98,5 @@ end)
 
 AddEventHandler('onResourceStop', function(resource)
     if resource ~= GetCurrentResourceName() then return end
-    W2F.ExitSelection()
+    W2F.CloseSelection()
 end)

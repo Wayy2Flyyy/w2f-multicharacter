@@ -79,11 +79,23 @@ function W2F.Qbox.LoadCharacterAt(citizenid, coords)
         return false
     end
 
+    local timeout = GetGameTimer() + 10000
+    while GetGameTimer() < timeout do
+        local playerData = QBX and QBX.PlayerData
+        if not playerData and exports.qbx_core and exports.qbx_core.GetPlayerData then
+            playerData = exports.qbx_core:GetPlayerData()
+        end
+        if playerData and playerData.citizenid == citizenid then
+            break
+        end
+        Wait(50)
+    end
+
     local ped = cache.ped or PlayerPedId()
     RequestCollisionAtCoord(coords.x, coords.y, coords.z)
 
-    local timeout = GetGameTimer() + 5000
-    while not HasCollisionLoadedAroundEntity(ped) and GetGameTimer() < timeout do
+    local collisionTimeout = GetGameTimer() + 5000
+    while not HasCollisionLoadedAroundEntity(ped) and GetGameTimer() < collisionTimeout do
         Wait(0)
     end
 

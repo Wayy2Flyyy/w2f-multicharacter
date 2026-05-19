@@ -124,6 +124,15 @@ function resetSelectionUI() {
     hideApp();
 }
 
+function spawnFailed() {
+    spawnBusy = false;
+    skyMode = false;
+    app.classList.remove('spawning');
+    setVisible(skySpawnPanel, false);
+    setVisible(hint, true);
+    showApp();
+}
+
 const handlers = {
     showSelection: () => {
         showApp();
@@ -149,6 +158,7 @@ const handlers = {
     },
     beginSpawnSequence: () => beginSpawnSequence(),
     resetSelectionUI: () => resetSelectionUI(),
+    spawnFailed: () => spawnFailed(),
 };
 
 window.addEventListener('message', (event) => {

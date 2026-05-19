@@ -25,7 +25,6 @@ Config.Scene = {
 
 Config.CameraControl = {
     enabled = true,
-    holdButton = 'LEFT_CLICK',
     sensitivityX = 0.08,
     sensitivityY = 0.04,
     smoothing = 0.12,
@@ -122,6 +121,22 @@ function Config.GetSceneFocal()
 end
 
 --- NUI-safe spawn list (no vector values).
+--- Distance from focal point based on ped lineup span (keeps all peds in frame).
+function Config.GetRecommendedCameraDistance()
+    local slots = Config.Scene.pedSlots
+    local c = Config.CameraControl
+    if not slots or #slots < 2 then
+        return c.defaultDistance
+    end
+
+    local first, last = slots[1], slots[#slots]
+    local span = #(vector3(first.x, first.y, first.z) - vector3(last.x, last.y, last.z))
+    local distance = span * 1.25 + 5.5
+    if distance < c.minDistance then return c.minDistance end
+    if distance > c.maxDistance then return c.maxDistance end
+    return distance
+end
+
 function Config.GetSpawnOptionsForNui()
     local options = {}
     for i = 1, #Config.Spawns do

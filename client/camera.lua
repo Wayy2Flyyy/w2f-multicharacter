@@ -78,16 +78,17 @@ function W2F.Camera.Create(focal)
     W2F.Camera.Destroy()
     W2F.Camera.focal = focal
     local c = cfg()
+    local distance = Config.GetRecommendedCameraDistance()
     W2F.Camera.currentYaw = c.defaultYaw
     W2F.Camera.currentPitch = c.defaultPitch
-    W2F.Camera.currentDistance = c.defaultDistance
+    W2F.Camera.currentDistance = distance
     W2F.Camera.targetYaw = c.defaultYaw
     W2F.Camera.targetPitch = c.defaultPitch
-    W2F.Camera.targetDistance = c.defaultDistance
+    W2F.Camera.targetDistance = distance
     W2F.Camera.currentFov = c.fov
     W2F.Camera.targetFov = c.fov
 
-    local pos = W2F.Camera.GetOrbitPosition(focal, c.defaultDistance, c.defaultYaw, c.defaultPitch)
+    local pos = W2F.Camera.GetOrbitPosition(focal, distance, c.defaultYaw, c.defaultPitch)
     W2F.Camera.handle = CreateCam('DEFAULT_SCRIPTED_CAMERA', true)
     SetCamCoord(W2F.Camera.handle, pos.x, pos.y, pos.z)
     W2F.Camera.SetRotation(W2F.Camera.handle, W2F.Camera.GetLookAtRotation(pos, focal))
@@ -113,7 +114,7 @@ function W2F.Camera.ResetTargets()
     local c = cfg()
     W2F.Camera.targetYaw = c.defaultYaw
     W2F.Camera.targetPitch = c.defaultPitch
-    W2F.Camera.targetDistance = c.defaultDistance
+    W2F.Camera.targetDistance = Config.GetRecommendedCameraDistance()
 end
 
 function W2F.Camera.ApplyDrag(deltaX, deltaY)
@@ -187,7 +188,8 @@ function W2F.Camera.PlayIntro()
     local scene = Config.Scene
     local focal = Config.GetSceneFocal()
     local c = cfg()
-    local endPos = W2F.Camera.GetOrbitPosition(focal, c.defaultDistance, c.defaultYaw, c.defaultPitch)
+    local distance = Config.GetRecommendedCameraDistance()
+    local endPos = W2F.Camera.GetOrbitPosition(focal, distance, c.defaultYaw, c.defaultPitch)
     local startPos = vector3(endPos.x, endPos.y, endPos.z + scene.introStartHeight)
 
     W2F.State.isIntroPlaying = true

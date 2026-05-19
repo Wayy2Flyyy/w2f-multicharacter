@@ -78,12 +78,11 @@ lib.callback.register('w2f-multicharacter:server:getLastLocation', function(_, c
     return nil
 end)
 
-RegisterNetEvent('w2f-multicharacter:server:loadCharacter', function(character, spawnCoords)
+RegisterNetEvent('w2f-multicharacter:server:loadCharacter', function(character, _spawnCoords)
     local src = source
     if not character or not character.citizenid then return end
 
     if Config.UseQbox and GetResourceState('qbx_core') == 'started' then
         exports.qbx_core:Login(src, character.citizenid)
-        return
     end
 end)
