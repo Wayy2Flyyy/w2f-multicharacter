@@ -49,6 +49,10 @@ function W2F.Interaction.UpdateCameraDrag()
         W2F.State.isDraggingCamera = false
         W2F.Interaction.lastMouseX = nil
         W2F.Interaction.lastMouseY = nil
+        CreateThread(function()
+            Wait(50)
+            W2F.Interaction.dragDistance = 0.0
+        end)
     end
 end
 

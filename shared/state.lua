@@ -1,5 +1,9 @@
 W2F = W2F or {}
 
+W2F.Selection = {
+    active = false,
+}
+
 ---@class W2FSelectionState
 W2F.State = {
     isInSelection = false,

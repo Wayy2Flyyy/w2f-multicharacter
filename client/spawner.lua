@@ -25,12 +25,26 @@ function W2F.Spawner.ResolveSpawnCoords(spawnId, character)
     return spawn.coords
 end
 
-function W2F.Spawner.CleanupVisuals()
-    W2F.Characters.ClearPreviewPeds()
-    W2F.Camera.Destroy()
-    ClearTimecycleModifier()
-    W2F.SetSelectionFocus(false)
-    W2F.SendNui('resetSelectionUI', {})
+function W2F.Spawner.RecoverFromFailedSpawn(message)
+    W2F.State.isSpawning = false
+    W2F.State.isSkySpawnMode = false
+    W2F.Camera.cinematic = nil
+    W2F.Camera.mode = 'overview'
+
+    W2F.SendNui('spawnFailed', { message = message or 'Spawn failed. Try again.' })
+
+    if not W2F.State.isInSelection then
+        W2F.Selection.active = false
+        Wait(300)
+        W2F.EnterSelection()
+        return
+    end
+
+    local focal = Config.GetSceneFocal()
+    W2F.Camera.Create(focal)
+    W2F.SetSelectionFocus(true, true)
+    W2F.SendNui('showSelection', {})
+    DoScreenFadeIn(500)
 end
 
 function W2F.Spawner.BeginSkySequence()
@@ -85,7 +99,7 @@ function W2F.Spawner.FlyToSpawn(spawnId)
     local character = W2F.State.selectedCharacter
     local coords = W2F.Spawner.ResolveSpawnCoords(spawnId, character)
     if not coords then
-        W2F.Debug('Failed to resolve spawn coords for %s', spawnId)
+        W2F.Spawner.RecoverFromFailedSpawn('Could not resolve spawn location.')
         return
     end
 
@@ -106,6 +120,7 @@ function W2F.Spawner.FlyToSpawn(spawnId)
         headingFrom = GetCamRot(W2F.Camera.handle, 2).z
     end
 
+    W2F.Camera.mode = 'cinematic'
     W2F.Camera.RunCinematic({
         {
             from = camPos,
@@ -143,11 +158,19 @@ function W2F.Spawner.FlyToSpawn(spawnId)
 end
 
 function W2F.Spawner.FinalizeSpawn(character, coords)
+    if not character or not character.citizenid or not coords then
+        W2F.Spawner.RecoverFromFailedSpawn('Invalid spawn data.')
+        return
+    end
+
     local sky = Config.SpawnCinematic
     DoScreenFadeOut(sky.fadeOutMs)
     while not IsScreenFadedOut() do Wait(0) end
 
-    W2F.Spawner.CleanupVisuals()
+    W2F.Characters.ClearPreviewPeds()
+    W2F.Camera.Destroy()
+    ClearTimecycleModifier()
+    W2F.SetSelectionFocus(false, false)
 
     local loaded = false
     if W2F.Qbox.IsActive() then
@@ -163,17 +186,22 @@ function W2F.Spawner.FinalizeSpawn(character, coords)
     end
 
     if not loaded then
-        lib.notify({
-            title = 'Character Select',
-            description = 'Failed to load character. Please reconnect.',
-            type = 'error',
-        })
-        W2F.ResetState()
-        DoScreenFadeIn(500)
+        W2F.SendNui('resetSelectionUI', {})
+        W2F.Spawner.RecoverFromFailedSpawn('Failed to load character.')
         return
     end
 
+    W2F.Selection.active = false
+    W2F.State.isInSelection = false
+    W2F.State.isSpawning = false
+    W2F.State.isSkySpawnMode = false
     W2F.ResetState()
+
+    W2F.Cleanup.EndTutorialSession()
+    W2F.Cleanup.ResetRoutingBucket()
+    DisplayRadar(true)
+    W2F.Cleanup.ResetPlayerPed()
+
     Wait(400)
     DoScreenFadeIn(sky.fadeInMs)
     W2F.PlayFrontendSound('BACK')

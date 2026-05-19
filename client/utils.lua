@@ -113,9 +113,11 @@ function W2F.FormatPlaytime(minutes)
     return ('%dm'):format(mins)
 end
 
-function W2F.SetSelectionFocus(enabled)
-    SetNuiFocus(enabled, enabled)
+function W2F.SetSelectionFocus(hasCursor, keepGameInput)
+    local cursor = hasCursor == true
+    local keepInput = keepGameInput == true
+    SetNuiFocus(cursor, cursor)
     if SetNuiFocusKeepInput then
-        SetNuiFocusKeepInput(enabled)
+        SetNuiFocusKeepInput(keepInput)
     end
 end

@@ -49,13 +49,15 @@ function W2F.Characters.ApplyHighlight(ped, mode)
     if mode == 'selected' then
         SetEntityDrawOutline(ped, true)
         SetEntityDrawOutlineColor(hl.selectedColor.r, hl.selectedColor.g, hl.selectedColor.b, 255)
+        ResetEntityAlpha(ped)
     elseif mode == 'hover' then
         SetEntityDrawOutline(ped, true)
         SetEntityDrawOutlineColor(hl.outlineColor.r, hl.outlineColor.g, hl.outlineColor.b, 180)
+        ResetEntityAlpha(ped)
     else
         SetEntityDrawOutline(ped, false)
+        SetEntityAlpha(ped, 210, false)
     end
-    ResetEntityAlpha(ped)
 end
 
 function W2F.Characters.RefreshHighlights()
