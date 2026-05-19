@@ -52,6 +52,10 @@ function W2F.EnterSelection()
     W2F.SendNui('hideSkySpawnOptions', {})
 
     W2F.Camera.PlayIntro()
+    if not W2F.Camera.active then
+        W2F.Cleanup.Full(true)
+        return
+    end
     W2F.Interaction.StartLoop()
 
     DoScreenFadeIn(800)

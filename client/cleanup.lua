@@ -25,6 +25,12 @@ function W2F.Cleanup.Visuals()
     W2F.Camera.Destroy()
     ClearTimecycleModifier()
     pcall(function() ClearExtraTimecycleModifier() end)
+    if AnimpostfxIsRunning('DeathFailOut') then
+        StopScreenEffect('DeathFailOut')
+    end
+    if IsScreenFadedOut() then
+        DoScreenFadeIn(250)
+    end
     W2F.SetSelectionFocus(false, false)
     W2F.SendNui('resetSelectionUI', {})
 end

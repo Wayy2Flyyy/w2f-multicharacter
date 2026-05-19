@@ -123,6 +123,15 @@ function W2F.Camera.Create(focal)
 
     local pos = W2F.Camera.GetOrbitPosition(focal, distance, W2F.Camera.currentYaw, W2F.Camera.currentPitch)
     W2F.Camera.handle = CreateCam('DEFAULT_SCRIPTED_CAMERA', true)
+    if not W2F.Camera.handle or not DoesCamExist(W2F.Camera.handle) then
+        W2F.Camera.handle = nil
+        W2F.Camera.active = false
+        W2F.State.cameraActive = false
+        if Config.Debug then
+            print('[w2f-multicharacter] camera create failed')
+        end
+        return false
+    end
     SetCamCoord(W2F.Camera.handle, pos.x, pos.y, pos.z)
     W2F.Camera.SetRotation(W2F.Camera.handle, W2F.Camera.GetLookAtRotation(pos, focal))
     SetCamFov(W2F.Camera.handle, W2F.Camera.currentFov)
@@ -133,6 +142,7 @@ function W2F.Camera.Create(focal)
     W2F.Camera.mode = 'overview'
     syncModeState('overview')
     W2F.Camera.driftSeed = GetGameTimer() * 0.001
+    return true
 end
 
 function W2F.Camera.Destroy()

@@ -112,11 +112,13 @@ end)
 
 local function resolveSpawnById(spawnId, citizenid)
     if type(spawnId) ~= 'string' or spawnId == '' then
+        if Config.Debug then print('[w2f-multicharacter] resolveSpawnById invalid spawn id') end
         return nil
     end
 
     local spawn = getSpawnById(spawnId)
     if not spawn then
+        if Config.Debug then print(('[w2f-multicharacter] resolveSpawnById unknown spawn id=%s'):format(tostring(spawnId))) end
         return nil
     end
 
@@ -135,6 +137,7 @@ local function resolveSpawnById(spawnId, citizenid)
         if fallback and fallback.coords then
             return { x = fallback.coords.x, y = fallback.coords.y, z = fallback.coords.z, w = fallback.coords.w or 0.0 }
         end
+        if Config.Debug then print('[w2f-multicharacter] resolveSpawnById last missing and fallback missing') end
         return nil
     end
 

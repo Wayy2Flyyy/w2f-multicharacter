@@ -26,9 +26,13 @@ function W2F.Spawner.RecoverFromFailedSpawn(message)
     end
 
     local focal = Config.GetSceneFocal()
-    W2F.Camera.Create(focal)
+    local created = W2F.Camera.Create(focal)
     W2F.SetSelectionFocus(true, true)
     W2F.SendNui('showSelection', {})
+    if not created then
+        W2F.Cleanup.Full(true)
+        return
+    end
     DoScreenFadeIn(500)
 end
 
@@ -162,6 +166,10 @@ end
 function W2F.Spawner.FinalizeSpawn(character, coords)
     if not character or not character.citizenid or not coords then
         W2F.Spawner.RecoverFromFailedSpawn('Invalid spawn data.')
+        return
+    end
+
+    if W2F.State.isInSelection ~= true then
         return
     end
 
