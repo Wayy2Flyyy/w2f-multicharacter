@@ -247,6 +247,23 @@ html, body {
     text-transform: uppercase;
     backdrop-filter: blur(10px);
     box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.35rem;
+    text-align: left;
+}
+
+.sky-card-label {
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+
+.sky-card-desc {
+    font-size: 0.68rem;
+    letter-spacing: 0.03em;
+    color: var(--muted);
+    text-transform: none;
 }
 
 .sky-card:hover,

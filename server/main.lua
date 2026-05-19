@@ -23,6 +23,15 @@ local function mapRow(row, index)
     }
 end
 
+local function getSpawnById(id)
+    for i = 1, #Config.Spawns do
+        local spawn = Config.Spawns[i]
+        if spawn.id == id then
+            return spawn
+        end
+    end
+end
+
 lib.callback.register('w2f-multicharacter:server:getCharacters', function(source)
     local license = getPlayerLicense(source)
     if not license then return {} end
@@ -78,6 +87,41 @@ lib.callback.register('w2f-multicharacter:server:getLastLocation', function(_, c
     return nil
 end)
 
+lib.callback.register('w2f-multicharacter:server:resolveSpawnById', function(_, spawnId, citizenid)
+    if type(spawnId) ~= 'string' or spawnId == '' then
+        return nil
+    end
+
+    local spawn = getSpawnById(spawnId)
+    if not spawn then
+        return nil
+    end
+
+    if spawn.type == 'last' then
+        if citizenid and citizenid ~= '' then
+            local row = MySQL.single.await('SELECT position FROM players WHERE citizenid = ?', { citizenid })
+            if row and row.position then
+                local decoded = decodeField(row.position)
+                if decoded and decoded.x then
+                    return { x = decoded.x, y = decoded.y, z = decoded.z, w = decoded.w or decoded.heading or 0.0 }
+                end
+            end
+        end
+
+        local fallback = getSpawnById(spawn.fallback or 'public')
+        if fallback and fallback.coords then
+            return { x = fallback.coords.x, y = fallback.coords.y, z = fallback.coords.z, w = fallback.coords.w or 0.0 }
+        end
+        return nil
+    end
+
+    if spawn.coords then
+        return { x = spawn.coords.x, y = spawn.coords.y, z = spawn.coords.z, w = spawn.coords.w or 0.0 }
+    end
+
+    return nil
+end)
+
 RegisterNetEvent('w2f-multicharacter:server:loadCharacter', function(character, _spawnCoords)
     local src = source
     if not character or not character.citizenid then return end
@@ -85,4 +129,14 @@ RegisterNetEvent('w2f-multicharacter:server:loadCharacter', function(character, 
     if Config.UseQbox and GetResourceState('qbx_core') == 'started' then
         exports.qbx_core:Login(src, character.citizenid)
     end
+end)
+
+RegisterNetEvent('w2f-multicharacter:server:setSelectionBucket', function()
+    local src = source
+    SetPlayerRoutingBucket(src, src)
+end)
+
+RegisterNetEvent('w2f-multicharacter:server:resetSelectionBucket', function()
+    local src = source
+    SetPlayerRoutingBucket(src, 0)
 end)
