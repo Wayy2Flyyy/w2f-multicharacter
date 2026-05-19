@@ -164,13 +164,11 @@ spawnBtn.addEventListener('click', () => {
 });
 
 closeDetailsBtn.addEventListener('click', () => {
-    hideCharacterDetails();
     post('cancelDetails');
 });
 
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && detailsVisible && !skyMode) {
-        hideCharacterDetails();
         post('cancelDetails');
     }
 });

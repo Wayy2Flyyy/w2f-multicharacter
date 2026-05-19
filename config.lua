@@ -2,9 +2,14 @@ Config = {}
 
 Config.Debug = false
 
--- Character selection scene (ped lineup + camera focal point)
+--- Set true only when qbx_core/config/client.lua has characters.useExternalCharacters = true
+Config.UseExternalCharacters = true
+
+--- Opens selection on session start (requires UseExternalCharacters)
+Config.AutoOpen = true
+
+-- Character selection scene (ped lineup)
 Config.Scene = {
-    focal = vec3(-1355.93, -1487.78, 4.04),
     pedSlots = {
         vec4(-1360.2, -1485.5, 3.04, 210.0),
         vec4(-1357.1, -1486.8, 3.04, 210.0),
@@ -13,7 +18,9 @@ Config.Scene = {
         vec4(-1347.8, -1490.7, 3.04, 210.0),
     },
     introDurationMs = 2800,
-    introStartHeight = 18.0,
+    introStartHeight = 16.0,
+    --- Extra height added to ped-center focal point for camera look-at
+    focalHeightOffset = 0.85,
 }
 
 Config.CameraControl = {
@@ -29,30 +36,29 @@ Config.CameraControl = {
     minDistance = 7.0,
     maxDistance = 11.0,
     defaultDistance = 9.0,
-    defaultYaw = 0.0,
-    defaultPitch = 4.0,
+    --- Slight diagonal in front of lineup (premium showcase angle)
+    defaultYaw = -12.0,
+    defaultPitch = 5.0,
     settleSpeed = 0.08,
     fov = 42.0,
     collisionProbe = true,
 }
 
 Config.Highlight = {
-    hoverAlpha = 0.35,
-    selectedAlpha = 0.55,
     outlineColor = { r = 255, g = 255, b = 255 },
     selectedColor = { r = 120, g = 200, b = 255 },
 }
 
 Config.Interaction = {
     clickDebounceMs = 350,
-    rayMaxDistance = 12.0,
-    pedSelectRadius = 1.35,
+    rayMaxDistance = 14.0,
+    pedSelectRadius = 1.45,
+    dragThreshold = 8.0,
 }
 
 Config.SpawnCinematic = {
     skyHeight = 420.0,
     skyRiseDurationMs = 2200,
-    skyRiseEasing = 0.08,
     flyDurationMs = 4500,
     flyHeight = 380.0,
     hoverDurationMs = 1200,
@@ -63,7 +69,7 @@ Config.SpawnCinematic = {
     fovGround = 42.0,
     fadeOutMs = 800,
     fadeInMs = 900,
-    soundHooks = true, -- plays GTA frontend sounds when available
+    soundHooks = true,
 }
 
 Config.Spawns = {
@@ -90,6 +96,40 @@ Config.Spawns = {
     },
 }
 
--- Qbox integration (do not duplicate core logic)
 Config.UseQbox = true
 Config.MaxCharacters = 5
+
+--- Computes the camera look-at focal point from ped slot positions.
+function Config.GetSceneFocal()
+    local slots = Config.Scene.pedSlots
+    if not slots or #slots == 0 then
+        return vec3(0.0, 0.0, 0.0)
+    end
+
+    local sumX, sumY, sumZ = 0.0, 0.0, 0.0
+    for i = 1, #slots do
+        sumX = sumX + slots[i].x
+        sumY = sumY + slots[i].y
+        sumZ = sumZ + slots[i].z
+    end
+
+    local count = #slots
+    return vec3(
+        sumX / count,
+        sumY / count,
+        (sumZ / count) + (Config.Scene.focalHeightOffset or 0.0)
+    )
+end
+
+--- NUI-safe spawn list (no vector values).
+function Config.GetSpawnOptionsForNui()
+    local options = {}
+    for i = 1, #Config.Spawns do
+        local spawn = Config.Spawns[i]
+        options[#options + 1] = {
+            id = spawn.id,
+            label = spawn.label,
+        }
+    end
+    return options
+end

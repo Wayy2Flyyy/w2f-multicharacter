@@ -10,12 +10,16 @@ W2F.Camera = {
     targetDistance = 9.0,
     currentFov = 42.0,
     targetFov = 42.0,
-    mode = 'overview', -- overview | sky | cinematic
+    mode = 'overview',
     cinematic = nil,
 }
 
 local function cfg()
     return Config.CameraControl
+end
+
+function W2F.Camera.SetRotation(cam, rot)
+    SetCamRot(cam, rot.x, rot.y, rot.z, 2)
 end
 
 function W2F.Camera.GetOrbitPosition(focal, distance, yawDeg, pitchDeg)
@@ -40,20 +44,34 @@ function W2F.Camera.GetLookAtRotation(from, to)
     return vector3(-pitch, 0.0, yaw)
 end
 
-function W2F.Camera.ProbeCollision(from, to)
+function W2F.Camera.ProbeCollision(focal, desired)
     if not cfg().collisionProbe then
-        return to
+        return desired
     end
-    local handle = StartShapeTestRay(from.x, from.y, from.z, to.x, to.y, to.z, 1, 0, 7)
-    local _, hit, hitCoords = GetShapeTestResult(handle)
-    if hit == 1 then
+
+    local handle = StartShapeTestRay(
+        desired.x, desired.y, desired.z,
+        focal.x, focal.y, focal.z,
+        1, 0, 7
+    )
+
+    local retval, hit, hitCoords = GetShapeTestResult(handle)
+    local attempts = 0
+    while retval == 1 and attempts < 5 do
+        Wait(0)
+        retval, hit, hitCoords = GetShapeTestResult(handle)
+        attempts = attempts + 1
+    end
+
+    if hit == 1 and hitCoords then
         return vector3(
-            hitCoords.x + (from.x - hitCoords.x) * 0.08,
-            hitCoords.y + (from.y - hitCoords.y) * 0.08,
-            hitCoords.z + (from.z - hitCoords.z) * 0.08
+            hitCoords.x + (desired.x - hitCoords.x) * 0.12,
+            hitCoords.y + (desired.y - hitCoords.y) * 0.12,
+            hitCoords.z + (desired.z - hitCoords.z) * 0.12
         )
     end
-    return to
+
+    return desired
 end
 
 function W2F.Camera.Create(focal)
@@ -72,7 +90,7 @@ function W2F.Camera.Create(focal)
     local pos = W2F.Camera.GetOrbitPosition(focal, c.defaultDistance, c.defaultYaw, c.defaultPitch)
     W2F.Camera.handle = CreateCam('DEFAULT_SCRIPTED_CAMERA', true)
     SetCamCoord(W2F.Camera.handle, pos.x, pos.y, pos.z)
-    SetCamRot(W2F.Camera.handle, W2F.Camera.GetLookAtRotation(pos, focal), 2)
+    W2F.Camera.SetRotation(W2F.Camera.handle, W2F.Camera.GetLookAtRotation(pos, focal))
     SetCamFov(W2F.Camera.handle, c.fov)
     SetCamActive(W2F.Camera.handle, true)
     RenderScriptCams(true, false, 0, true, true)
@@ -88,6 +106,7 @@ function W2F.Camera.Destroy()
     W2F.Camera.handle = nil
     W2F.Camera.active = false
     W2F.Camera.cinematic = nil
+    W2F.Camera.mode = 'overview'
 end
 
 function W2F.Camera.ResetTargets()
@@ -123,10 +142,25 @@ function W2F.Camera.Settle()
     W2F.Camera.targetPitch = W2F.SmoothStep(W2F.Camera.targetPitch, c.defaultPitch, c.settleSpeed)
 end
 
+function W2F.Camera.ApplyTransform(pos, focal, fov)
+    if not W2F.Camera.handle then return end
+    local safe = W2F.Camera.ProbeCollision(focal, pos)
+    local rot = W2F.Camera.GetLookAtRotation(safe, focal)
+    SetCamCoord(W2F.Camera.handle, safe.x, safe.y, safe.z)
+    W2F.Camera.SetRotation(W2F.Camera.handle, rot)
+    if fov then
+        SetCamFov(W2F.Camera.handle, fov)
+    end
+end
+
 function W2F.Camera.UpdateOverview()
     if not W2F.Camera.active or not W2F.Camera.handle or W2F.Camera.mode ~= 'overview' then
         return
     end
+    if W2F.State.isIntroPlaying then
+        return
+    end
+
     local c = cfg()
     local smooth = c.smoothing
     if not W2F.State.isDraggingCamera then
@@ -146,40 +180,36 @@ function W2F.Camera.UpdateOverview()
         W2F.Camera.currentYaw,
         W2F.Camera.currentPitch
     )
-    local safe = W2F.Camera.ProbeCollision(focal, desired)
-    local rot = W2F.Camera.GetLookAtRotation(safe, focal)
-    SetCamCoord(W2F.Camera.handle, safe.x, safe.y, safe.z)
-    SetCamRot(W2F.Camera.handle, rot.x, rot.y, rot.z, 2)
-    SetCamFov(W2F.Camera.handle, W2F.Camera.currentFov)
+    W2F.Camera.ApplyTransform(desired, focal, W2F.Camera.currentFov)
 end
 
 function W2F.Camera.PlayIntro()
     local scene = Config.Scene
-    local focal = scene.focal
+    local focal = Config.GetSceneFocal()
     local c = cfg()
     local endPos = W2F.Camera.GetOrbitPosition(focal, c.defaultDistance, c.defaultYaw, c.defaultPitch)
     local startPos = vector3(endPos.x, endPos.y, endPos.z + scene.introStartHeight)
 
+    W2F.State.isIntroPlaying = true
     W2F.Camera.Create(focal)
-    SetCamCoord(W2F.Camera.handle, startPos.x, startPos.y, startPos.z)
-    local rot = W2F.Camera.GetLookAtRotation(startPos, focal)
-    SetCamRot(W2F.Camera.handle, rot.x, rot.y, rot.z, 2)
+    W2F.Camera.ApplyTransform(startPos, focal, c.fov)
 
     local startTime = GetGameTimer()
     local duration = scene.introDurationMs
 
     CreateThread(function()
-        while W2F.Camera.active and W2F.Camera.mode == 'overview' do
+        while W2F.Camera.active and W2F.State.isIntroPlaying do
             local elapsed = GetGameTimer() - startTime
             local t = W2F.Clamp(elapsed / duration, 0.0, 1.0)
             local eased = W2F.EaseOutCubic(t)
             local pos = W2F.Vec3Lerp(startPos, endPos, eased)
-            local r = W2F.Camera.GetLookAtRotation(pos, focal)
-            SetCamCoord(W2F.Camera.handle, pos.x, pos.y, pos.z)
-            SetCamRot(W2F.Camera.handle, r.x, r.y, r.z, 2)
-            if t >= 1.0 then break end
+            W2F.Camera.ApplyTransform(pos, focal, c.fov)
+            if t >= 1.0 then
+                break
+            end
             Wait(0)
         end
+        W2F.State.isIntroPlaying = false
     end)
 end
 
@@ -199,8 +229,9 @@ function W2F.Camera.UpdateCinematic()
 
     local step = cin.sequence[cin.index]
     if not step then
-        if cin.onComplete then cin.onComplete() end
+        local done = cin.onComplete
         W2F.Camera.cinematic = nil
+        if done then done() end
         return
     end
 
@@ -212,16 +243,16 @@ function W2F.Camera.UpdateCinematic()
     local lookAt = step.lookAt or W2F.Camera.focal
     local rot = W2F.Camera.GetLookAtRotation(pos, lookAt)
     SetCamCoord(W2F.Camera.handle, pos.x, pos.y, pos.z)
-    SetCamRot(W2F.Camera.handle, rot.x, rot.y, rot.z, 2)
-
-    if step.fovFrom and step.fovTo then
-        local fov = W2F.Lerp(step.fovFrom, step.fovTo, eased)
-        SetCamFov(W2F.Camera.handle, fov)
-    end
 
     if step.rotate and step.headingFrom and step.headingTo then
         local heading = W2F.Lerp(step.headingFrom, step.headingTo, eased)
-        SetCamRot(W2F.Camera.handle, rot.x, rot.y, heading, 2)
+        W2F.Camera.SetRotation(W2F.Camera.handle, vector3(rot.x, rot.y, heading))
+    else
+        W2F.Camera.SetRotation(W2F.Camera.handle, rot)
+    end
+
+    if step.fovFrom and step.fovTo then
+        SetCamFov(W2F.Camera.handle, W2F.Lerp(step.fovFrom, step.fovTo, eased))
     end
 
     if t >= 1.0 then
@@ -244,5 +275,12 @@ function W2F.Camera.GetCurrentCoord()
     if W2F.Camera.handle and DoesCamExist(W2F.Camera.handle) then
         return GetCamCoord(W2F.Camera.handle)
     end
-    return GetFinalRenderedCamCoord()
+    return GetGameplayCamCoord()
+end
+
+function W2F.Camera.GetRenderedTransform()
+    if W2F.Camera.handle and DoesCamExist(W2F.Camera.handle) then
+        return GetCamCoord(W2F.Camera.handle), GetCamRot(W2F.Camera.handle, 2)
+    end
+    return GetGameplayCamCoord(), GetGameplayCamRot(2)
 end

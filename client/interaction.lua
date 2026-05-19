@@ -1,8 +1,8 @@
 W2F.Interaction = {
     lastMouseX = nil,
     lastMouseY = nil,
-    dragActive = false,
     dragDistance = 0.0,
+    loopRunning = false,
 }
 
 local function isLeftClickHeld()
@@ -21,20 +21,19 @@ function W2F.Interaction.UpdateCameraDrag()
     if not W2F.State.isInSelection or W2F.State.isSkySpawnMode or W2F.State.isSpawning then
         return
     end
-    if W2F.Camera.mode ~= 'overview' then
+    if W2F.Camera.mode ~= 'overview' or W2F.State.isIntroPlaying then
         return
     end
 
-    local cfg = Config.CameraControl
-    if not cfg.enabled then return end
+    local camCfg = Config.CameraControl
+    if not camCfg.enabled then return end
 
-  local cursorX, cursorY = GetNuiCursorPosition()
+    local cursorX, cursorY = GetNuiCursorPosition()
     if not cursorX then return end
 
     if isLeftClickHeld() then
         if not W2F.State.isDraggingCamera then
             W2F.State.isDraggingCamera = true
-            W2F.Interaction.dragActive = true
             W2F.Interaction.dragDistance = 0.0
             W2F.Interaction.lastMouseX = cursorX
             W2F.Interaction.lastMouseY = cursorY
@@ -48,7 +47,6 @@ function W2F.Interaction.UpdateCameraDrag()
         end
     elseif wasLeftClickReleased() and W2F.State.isDraggingCamera then
         W2F.State.isDraggingCamera = false
-        W2F.Interaction.dragActive = false
         W2F.Interaction.lastMouseX = nil
         W2F.Interaction.lastMouseY = nil
     end
@@ -58,7 +56,7 @@ function W2F.Interaction.UpdatePedTargeting()
     if not W2F.State.isInSelection or W2F.State.isSkySpawnMode or W2F.State.isSpawning then
         return
     end
-    if W2F.State.isDraggingCamera then
+    if W2F.State.isDraggingCamera or W2F.State.isIntroPlaying then
         return
     end
 
@@ -71,12 +69,10 @@ function W2F.Interaction.UpdatePedTargeting()
             W2F.Characters.RefreshHighlights()
             W2F.SendNui('updateHoveredPed', { slot = slot })
         end
-    else
-        if W2F.State.hoveredPed then
-            W2F.SetHovered(nil, nil)
-            W2F.Characters.RefreshHighlights()
-            W2F.SendNui('updateHoveredPed', { slot = nil })
-        end
+    elseif W2F.State.hoveredPed then
+        W2F.SetHovered(nil, nil)
+        W2F.Characters.RefreshHighlights()
+        W2F.SendNui('updateHoveredPed', { slot = nil })
     end
 end
 
@@ -84,14 +80,15 @@ function W2F.Interaction.HandleClick()
     if not W2F.State.isInSelection or W2F.State.isSkySpawnMode or W2F.State.isSpawning then
         return
     end
-    if W2F.State.isDraggingCamera or W2F.Interaction.dragDistance > 8.0 then
+    if W2F.State.isIntroPlaying or W2F.State.isDraggingCamera then
+        return
+    end
+    if not wasLeftClickPressed() or not W2F.CanClick() then
+        return
+    end
+
+    if W2F.Interaction.dragDistance > Config.Interaction.dragThreshold then
         W2F.Interaction.dragDistance = 0.0
-        return
-    end
-    if not wasLeftClickPressed() then
-        return
-    end
-    if not W2F.CanClick() then
         return
     end
 
@@ -99,39 +96,44 @@ function W2F.Interaction.HandleClick()
     local slot, entry = W2F.Characters.FindPedNearRay(origin, direction)
 
     if slot and entry and entry.character then
-        if W2F.State.selectedPed == entry.ped then
-            return
+        if W2F.State.selectedPed ~= entry.ped then
+            W2F.Characters.SelectSlot(slot, entry)
         end
-        W2F.Characters.SelectSlot(slot, entry)
-    else
-        if W2F.State.detailsVisible then
-            W2F.MarkClick()
-            W2F.Characters.ClearSelection()
-        end
+    elseif W2F.State.detailsVisible then
+        W2F.MarkClick()
+        W2F.Characters.ClearSelection()
     end
 end
 
 function W2F.Interaction.DisableControls()
     DisableAllControlActions(0)
-    EnableControlAction(0, 1, true)  -- Look LR (unused with NUI cursor)
-    EnableControlAction(0, 2, true)  -- Look UD
-    EnableControlAction(0, 24, true) -- Attack / left click
-    EnableControlAction(0, 25, true)
-    EnableControlAction(0, 245, true) -- Chat
+    EnableControlAction(0, 24, true)
+    EnableControlAction(0, 245, true)
 end
 
 function W2F.Interaction.StartLoop()
+    if W2F.Interaction.loopRunning then
+        return
+    end
+    W2F.Interaction.loopRunning = true
+
     CreateThread(function()
         while W2F.State.isInSelection do
             W2F.Interaction.DisableControls()
-            if W2F.Camera.mode == 'overview' and not W2F.State.isSpawning and not W2F.State.isSkySpawnMode then
+
+            if W2F.Camera.mode == 'overview'
+                and not W2F.State.isSpawning
+                and not W2F.State.isSkySpawnMode
+            then
                 W2F.Interaction.UpdateCameraDrag()
                 W2F.Interaction.UpdatePedTargeting()
                 W2F.Interaction.HandleClick()
             end
+
             W2F.Camera.Update()
             Wait(0)
         end
+        W2F.Interaction.loopRunning = false
     end)
 end
 
