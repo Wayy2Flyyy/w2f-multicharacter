@@ -79,7 +79,10 @@ function buildSkyCards(spawns) {
         card.type = 'button';
         card.className = 'sky-card';
         card.dataset.id = spawn.id;
-        card.innerHTML = `<span class="sky-card-label">${spawn.label}</span>`;
+        card.innerHTML = `
+            <span class="sky-card-label">${spawn.label}</span>
+            <span class="sky-card-desc">${spawn.description || ''}</span>
+        `;
         card.addEventListener('click', () => {
             if (spawnBusy) return;
             spawnBusy = true;

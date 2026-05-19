@@ -152,21 +152,25 @@ Config.Spawns = {
         label = 'Last Location',
         type = 'last',
         fallback = 'public',
+        description = 'Return to your saved position.',
     },
     {
         id = 'police',
         label = 'Police Station',
         coords = vec4(441.23, -981.89, 30.69, 90.0),
+        description = 'Spawn near the main police station.',
     },
     {
         id = 'public',
         label = 'Public Centre',
         coords = vec4(215.76, -810.12, 30.73, 160.0),
+        description = 'Spawn in the central public area.',
     },
     {
         id = 'hospital',
         label = 'Hospital',
         coords = vec4(298.54, -584.41, 43.26, 70.0),
+        description = 'Spawn near medical services.',
     },
 }
 
@@ -219,6 +223,7 @@ function Config.GetSpawnOptionsForNui()
         options[#options + 1] = {
             id = spawn.id,
             label = spawn.label,
+            description = spawn.description,
         }
     end
     return options

@@ -1,28 +1,12 @@
 W2F.Spawner = {}
 
-local function getSpawnById(id)
-    for i = 1, #Config.Spawns do
-        local spawn = Config.Spawns[i]
-        if spawn.id == id then
-            return spawn
-        end
-    end
-end
-
 function W2F.Spawner.ResolveSpawnCoords(spawnId, character)
-    local spawn = getSpawnById(spawnId)
-    if not spawn then return nil end
-
-    if spawn.type == 'last' then
-        local last = lib.callback.await('w2f-multicharacter:server:getLastLocation', false, character)
-        if last and last.x then
-            return vec4(last.x, last.y, last.z, last.w or 0.0)
-        end
-        local fallback = getSpawnById(spawn.fallback or 'public')
-        return fallback and fallback.coords or nil
+    local citizenid = character and character.citizenid or nil
+    local resolved = lib.callback.await('w2f-multicharacter:server:resolveSpawnById', false, spawnId, citizenid)
+    if not resolved or not resolved.x then
+        return nil
     end
-
-    return spawn.coords
+    return vec4(resolved.x, resolved.y, resolved.z, resolved.w or 0.0)
 end
 
 function W2F.Spawner.RecoverFromFailedSpawn(message)
