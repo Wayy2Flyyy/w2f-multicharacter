@@ -1,0 +1,295 @@
+:root {
+    --bg-glass: rgba(12, 14, 18, 0.72);
+    --border: rgba(255, 255, 255, 0.12);
+    --text: #f2f4f8;
+    --muted: rgba(242, 244, 248, 0.65);
+    --accent: #78c8ff;
+    --accent-dim: rgba(120, 200, 255, 0.35);
+    --shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+    --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    font-family: var(--font);
+    color: var(--text);
+    background: transparent;
+    user-select: none;
+}
+
+.hidden {
+    opacity: 0;
+    pointer-events: none;
+    visibility: hidden;
+}
+
+.visible, .app:not(.hidden) {
+    opacity: 1;
+    pointer-events: none;
+    visibility: visible;
+}
+
+.app {
+    position: fixed;
+    inset: 0;
+    transition: opacity 0.35s ease;
+}
+
+.app.spawning .hint,
+.app.spawning .details-panel {
+    opacity: 0;
+    transition: opacity 0.4s ease;
+}
+
+/* Hint bar */
+.hint {
+    position: absolute;
+    bottom: 2.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 2rem;
+    padding: 0.65rem 1.25rem;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 0.8rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+    pointer-events: none;
+    backdrop-filter: blur(8px);
+}
+
+.hint kbd {
+    display: inline-block;
+    padding: 0.1rem 0.35rem;
+    margin-right: 0.25rem;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    color: var(--text);
+    font-size: 0.75rem;
+}
+
+/* Character details — sleek projected panel */
+.details-panel {
+    position: absolute;
+    right: 3rem;
+    top: 50%;
+    transform: translateY(-50%);
+    width: min(22rem, 28vw);
+    padding: 1.5rem 1.75rem;
+    background: var(--bg-glass);
+    border: 1px solid var(--border);
+    border-left: 2px solid var(--accent-dim);
+    box-shadow: var(--shadow);
+    pointer-events: auto;
+    backdrop-filter: blur(14px);
+    transition: opacity 0.35s ease, transform 0.35s ease;
+}
+
+.details-panel.fade-in {
+    animation: panelIn 0.4s ease forwards;
+}
+
+.details-panel::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(120, 200, 255, 0.06), transparent 50%);
+    pointer-events: none;
+}
+
+.panel-glow {
+    position: absolute;
+    top: -1px;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity: 0.5;
+}
+
+.panel-header h1 {
+    font-size: 1.35rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    margin-bottom: 0.25rem;
+}
+
+.panel-header .sub {
+    font-size: 0.85rem;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.panel-stats {
+    margin: 1.25rem 0 1.5rem;
+    display: grid;
+    gap: 0.75rem;
+}
+
+.panel-stats div {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.panel-stats dt {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+}
+
+.panel-stats dd {
+    font-size: 0.9rem;
+    font-weight: 500;
+    text-align: right;
+}
+
+.panel-actions {
+    display: flex;
+    gap: 0.75rem;
+}
+
+.btn-primary,
+.btn-ghost,
+.sky-card {
+    font-family: inherit;
+    cursor: pointer;
+    border: none;
+    transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+}
+
+.btn-primary {
+    flex: 1;
+    padding: 0.75rem 1rem;
+    background: linear-gradient(180deg, rgba(120, 200, 255, 0.25), rgba(120, 200, 255, 0.12));
+    border: 1px solid rgba(120, 200, 255, 0.45);
+    color: var(--text);
+    font-size: 0.9rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.btn-primary:hover {
+    background: linear-gradient(180deg, rgba(120, 200, 255, 0.4), rgba(120, 200, 255, 0.2));
+    transform: translateY(-1px);
+}
+
+.btn-ghost {
+    padding: 0.75rem 1rem;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.btn-ghost:hover {
+    color: var(--text);
+    border-color: rgba(255, 255, 255, 0.25);
+}
+
+/* Sky spawn selection */
+.sky-panel {
+    position: absolute;
+    left: 50%;
+    bottom: 12%;
+    transform: translateX(-50%);
+    text-align: center;
+    pointer-events: auto;
+    width: min(52rem, 90vw);
+}
+
+.sky-panel.fade-in {
+    animation: skyIn 0.5s ease forwards;
+}
+
+.sky-title {
+    font-size: 0.85rem;
+    font-weight: 500;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 1.25rem;
+}
+
+.sky-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.85rem;
+}
+
+.sky-card {
+    padding: 1.1rem 0.75rem;
+    background: var(--bg-glass);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-size: 0.82rem;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    backdrop-filter: blur(10px);
+    box-shadow: var(--shadow);
+}
+
+.sky-card:hover,
+.sky-card.hover {
+    border-color: var(--accent);
+    background: rgba(20, 28, 38, 0.85);
+    transform: translateY(-2px);
+}
+
+.sky-card.selected {
+    border-color: var(--accent);
+    box-shadow: 0 0 20px var(--accent-dim);
+}
+
+@keyframes panelIn {
+    from {
+        opacity: 0;
+        transform: translateY(-50%) translateX(1rem);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(-50%) translateX(0);
+    }
+}
+
+@keyframes skyIn {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(1rem);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+}
+
+@media (max-width: 900px) {
+    .sky-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .details-panel {
+        right: 1.5rem;
+        width: min(20rem, 42vw);
+    }
+}
