@@ -27,6 +27,7 @@ end
 
 function W2F.Spawner.RecoverFromFailedSpawn(message)
     W2F.State.isSpawning = false
+    W2F.State.isTransitioningToSky = false
     W2F.State.isSkySpawnMode = false
     W2F.Camera.cinematic = nil
     W2F.Camera.mode = 'overview'
@@ -48,15 +49,18 @@ function W2F.Spawner.RecoverFromFailedSpawn(message)
 end
 
 function W2F.Spawner.BeginSkySequence()
-    if W2F.State.isSpawning or not W2F.State.selectedCharacter then
+    if W2F.State.isSpawning or W2F.State.isTransitioningToSky or W2F.State.isSkySpawnMode or not W2F.State.selectedCharacter then
         return
     end
 
     W2F.State.isSpawning = true
+    W2F.State.isTransitioningToSky = true
     W2F.State.detailsVisible = false
+    W2F.SetHovered(nil, nil)
 
     W2F.SendNui('beginSpawnSequence', {})
     W2F.SendNui('hideCharacterDetails', {})
+    W2F.SendNui('hideSelectionHints', {})
 
     DoScreenFadeOut(400)
     while not IsScreenFadedOut() do Wait(0) end
@@ -73,15 +77,17 @@ function W2F.Spawner.BeginSkySequence()
 
     W2F.Camera.RunCinematic({
         {
+            mode = 'sky',
             from = camPos,
             to = skyPos,
             lookAt = focal,
             duration = sky.skyRiseDurationMs,
-            fovFrom = Config.CameraControl.fov,
+            fovFrom = (Config.Camera and Config.Camera.overview and Config.Camera.overview.fov) or Config.CameraControl.fov,
             fovTo = sky.fovSky,
             easing = W2F.EaseInOutCubic,
         },
     }, function()
+        W2F.State.isTransitioningToSky = false
         W2F.State.isSkySpawnMode = true
         W2F.Camera.mode = 'sky'
         W2F.SendNui('showSkySpawnOptions', {
@@ -92,7 +98,7 @@ function W2F.Spawner.BeginSkySequence()
 end
 
 function W2F.Spawner.FlyToSpawn(spawnId)
-    if not W2F.State.isSkySpawnMode or not W2F.State.selectedCharacter then
+    if W2F.State.isTransitioningToSky or not W2F.State.isSkySpawnMode or not W2F.State.selectedCharacter then
         return
     end
 
@@ -123,6 +129,7 @@ function W2F.Spawner.FlyToSpawn(spawnId)
     W2F.Camera.mode = 'cinematic'
     W2F.Camera.RunCinematic({
         {
+            mode = 'flyToSpawn',
             from = camPos,
             to = aboveTarget,
             lookAt = groundLook,
@@ -132,6 +139,7 @@ function W2F.Spawner.FlyToSpawn(spawnId)
             easing = W2F.EaseInOutCubic,
         },
         {
+            mode = 'sky',
             from = aboveTarget,
             to = hoverTarget,
             lookAt = groundLook,
@@ -141,6 +149,7 @@ function W2F.Spawner.FlyToSpawn(spawnId)
             easing = W2F.EaseOutCubic,
         },
         {
+            mode = 'descent',
             from = hoverTarget,
             to = vector3(coords.x + 2.0, coords.y + 2.0, coords.z + 6.0),
             lookAt = groundLook,
@@ -193,6 +202,7 @@ function W2F.Spawner.FinalizeSpawn(character, coords)
 
     W2F.Selection.active = false
     W2F.State.isInSelection = false
+    W2F.State.isTransitioningToSky = false
     W2F.State.isSpawning = false
     W2F.State.isSkySpawnMode = false
     W2F.ResetState()

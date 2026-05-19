@@ -86,3 +86,13 @@ RegisterNetEvent('w2f-multicharacter:server:loadCharacter', function(character, 
         exports.qbx_core:Login(src, character.citizenid)
     end
 end)
+
+RegisterNetEvent('w2f-multicharacter:server:setSelectionBucket', function()
+    local src = source
+    SetPlayerRoutingBucket(src, src)
+end)
+
+RegisterNetEvent('w2f-multicharacter:server:resetSelectionBucket', function()
+    local src = source
+    SetPlayerRoutingBucket(src, 0)
+end)

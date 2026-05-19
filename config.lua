@@ -11,11 +11,11 @@ Config.AutoOpen = true
 -- Character selection scene (ped lineup)
 Config.Scene = {
     pedSlots = {
-        vec4(-1360.2, -1485.5, 3.04, 210.0),
-        vec4(-1357.1, -1486.8, 3.04, 210.0),
-        vec4(-1354.0, -1488.1, 3.04, 210.0),
-        vec4(-1350.9, -1489.4, 3.04, 210.0),
-        vec4(-1347.8, -1490.7, 3.04, 210.0),
+        vec4(-1360.7, -1485.5, 3.04, 196.0),
+        vec4(-1358.1, -1486.9, 3.06, 204.0),
+        vec4(-1354.9, -1487.7, 3.10, 211.0),
+        vec4(-1351.7, -1487.0, 3.06, 218.0),
+        vec4(-1349.2, -1485.5, 3.04, 226.0),
     },
     introDurationMs = 2800,
     introStartHeight = 16.0,
@@ -23,8 +23,63 @@ Config.Scene = {
     focalHeightOffset = 0.85,
 }
 
+Config.SceneProfiles = {
+    neutral = {
+        lighting = 'clean',
+        animation = 'WORLD_HUMAN_STAND_IMPATIENT',
+        props = {},
+    },
+    police = {
+        lighting = 'emergency',
+        animation = 'WORLD_HUMAN_COP_IDLES',
+        props = {},
+    },
+    medical = {
+        lighting = 'medical',
+        animation = 'WORLD_HUMAN_CLIPBOARD',
+        props = {},
+    },
+    garage = {
+        lighting = 'garage',
+        animation = 'WORLD_HUMAN_HAMMERING',
+        props = {},
+    },
+    street = {
+        lighting = 'dark',
+        animation = 'WORLD_HUMAN_SMOKING',
+        props = {},
+    },
+    executive = {
+        lighting = 'clean',
+        animation = 'WORLD_HUMAN_STAND_MOBILE',
+        props = {},
+    },
+}
+
+Config.SceneJobMap = {
+    police = 'police',
+    sheriff = 'police',
+    state = 'police',
+    ambulance = 'medical',
+    ems = 'medical',
+    doctor = 'medical',
+    mechanic = 'garage',
+    tuner = 'garage',
+    gang = 'street',
+    ballas = 'street',
+    vagos = 'street',
+    families = 'street',
+    cartel = 'street',
+    unemployed = 'neutral',
+    realestate = 'executive',
+    lawyer = 'executive',
+    judge = 'executive',
+    casino = 'executive',
+}
+
 Config.CameraControl = {
     enabled = true,
+    holdButton = 'LEFT_CLICK',
     sensitivityX = 0.08,
     sensitivityY = 0.04,
     smoothing = 0.12,
@@ -36,11 +91,31 @@ Config.CameraControl = {
     maxDistance = 11.0,
     defaultDistance = 9.0,
     --- Slight diagonal in front of lineup (premium showcase angle)
-    defaultYaw = -12.0,
-    defaultPitch = 5.0,
+    defaultYaw = -10.0,
+    defaultPitch = 4.0,
     settleSpeed = 0.08,
+    dragThreshold = 8,
     fov = 42.0,
     collisionProbe = true,
+}
+
+Config.Camera = {
+    overview = {
+        distance = 9.0,
+        height = 1.8,
+        fov = 42.0,
+        yaw = 0.0,
+        pitch = 4.0,
+    },
+    focus = {
+        distance = 5.5,
+        height = 1.4,
+        fov = 35.0,
+    },
+    smoothing = 0.12,
+    idleDrift = true,
+    idleDriftStrength = 0.035,
+    resetTime = 900,
 }
 
 Config.Highlight = {
