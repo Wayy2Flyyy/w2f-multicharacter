@@ -2,6 +2,8 @@ W2F.Interaction = {
     lastMouseX = nil,
     lastMouseY = nil,
     dragDistance = 0.0,
+    clickStart = nil,
+    clickStartPos = nil,
     loopRunning = false,
 }
 
