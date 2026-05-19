@@ -1,32 +1,17 @@
 W2F.Spawner = {}
 
-local function getSpawnById(id)
-    for i = 1, #Config.Spawns do
-        local spawn = Config.Spawns[i]
-        if spawn.id == id then
-            return spawn
-        end
-    end
-end
-
 function W2F.Spawner.ResolveSpawnCoords(spawnId, character)
-    local spawn = getSpawnById(spawnId)
-    if not spawn then return nil end
-
-    if spawn.type == 'last' then
-        local last = lib.callback.await('w2f-multicharacter:server:getLastLocation', false, character)
-        if last and last.x then
-            return vec4(last.x, last.y, last.z, last.w or 0.0)
-        end
-        local fallback = getSpawnById(spawn.fallback or 'public')
-        return fallback and fallback.coords or nil
+    local citizenid = character and character.citizenid or nil
+    local resolved = lib.callback.await('w2f-multicharacter:server:requestSpawn', false, spawnId, citizenid)
+    if not resolved or not resolved.x then
+        return nil
     end
-
-    return spawn.coords
+    return vec4(resolved.x, resolved.y, resolved.z, resolved.w or 0.0)
 end
 
 function W2F.Spawner.RecoverFromFailedSpawn(message)
     W2F.State.isSpawning = false
+    W2F.State.isTransitioningToSky = false
     W2F.State.isSkySpawnMode = false
     W2F.Camera.cinematic = nil
     W2F.Camera.mode = 'overview'
@@ -48,15 +33,18 @@ function W2F.Spawner.RecoverFromFailedSpawn(message)
 end
 
 function W2F.Spawner.BeginSkySequence()
-    if W2F.State.isSpawning or not W2F.State.selectedCharacter then
+    if W2F.State.isSpawning or W2F.State.isTransitioningToSky or W2F.State.isSkySpawnMode or not W2F.State.selectedCharacter then
         return
     end
 
     W2F.State.isSpawning = true
+    W2F.State.isTransitioningToSky = true
     W2F.State.detailsVisible = false
+    W2F.SetHovered(nil, nil)
 
     W2F.SendNui('beginSpawnSequence', {})
     W2F.SendNui('hideCharacterDetails', {})
+    W2F.SendNui('hideSelectionHints', {})
 
     DoScreenFadeOut(400)
     while not IsScreenFadedOut() do Wait(0) end
@@ -73,15 +61,17 @@ function W2F.Spawner.BeginSkySequence()
 
     W2F.Camera.RunCinematic({
         {
+            mode = 'sky',
             from = camPos,
             to = skyPos,
             lookAt = focal,
             duration = sky.skyRiseDurationMs,
-            fovFrom = Config.CameraControl.fov,
+            fovFrom = (Config.Camera and Config.Camera.overview and Config.Camera.overview.fov) or Config.CameraControl.fov,
             fovTo = sky.fovSky,
             easing = W2F.EaseInOutCubic,
         },
     }, function()
+        W2F.State.isTransitioningToSky = false
         W2F.State.isSkySpawnMode = true
         W2F.Camera.mode = 'sky'
         W2F.SendNui('showSkySpawnOptions', {
@@ -92,7 +82,7 @@ function W2F.Spawner.BeginSkySequence()
 end
 
 function W2F.Spawner.FlyToSpawn(spawnId)
-    if not W2F.State.isSkySpawnMode or not W2F.State.selectedCharacter then
+    if W2F.State.isTransitioningToSky or not W2F.State.isSkySpawnMode or not W2F.State.selectedCharacter then
         return
     end
 
@@ -110,8 +100,8 @@ function W2F.Spawner.FlyToSpawn(spawnId)
     local sky = Config.SpawnCinematic
     local camPos = W2F.Camera.GetCurrentCoord()
     local aboveTarget = vector3(coords.x, coords.y, coords.z + sky.flyHeight)
-    local hoverTarget = vector3(coords.x, coords.y, coords.z + sky.descendEndHeight + 40.0)
     local groundLook = vector3(coords.x, coords.y, coords.z)
+    local travelDistance = #(aboveTarget - camPos)
 
     W2F.PlayFrontendSound('WAYPOINT_SET')
 
@@ -121,8 +111,18 @@ function W2F.Spawner.FlyToSpawn(spawnId)
     end
 
     W2F.Camera.mode = 'cinematic'
+    if travelDistance > (sky.travelFadeDistance or 2600.0) then
+        DoScreenFadeOut(sky.travelFadeOutMs or 320)
+        while not IsScreenFadedOut() do Wait(0) end
+        SetCamCoord(W2F.Camera.handle, aboveTarget.x, aboveTarget.y, aboveTarget.z)
+        W2F.Camera.SetRotation(W2F.Camera.handle, W2F.Camera.GetLookAtRotation(aboveTarget, groundLook))
+        SetCamFov(W2F.Camera.handle, sky.fovSky)
+        DoScreenFadeIn(sky.travelFadeInMs or 420)
+    end
+
     W2F.Camera.RunCinematic({
         {
+            mode = 'flyToSpawn',
             from = camPos,
             to = aboveTarget,
             lookAt = groundLook,
@@ -132,8 +132,9 @@ function W2F.Spawner.FlyToSpawn(spawnId)
             easing = W2F.EaseInOutCubic,
         },
         {
+            mode = 'sky',
             from = aboveTarget,
-            to = hoverTarget,
+            to = aboveTarget,
             lookAt = groundLook,
             duration = sky.hoverDurationMs,
             fovFrom = sky.fovSky,
@@ -141,7 +142,8 @@ function W2F.Spawner.FlyToSpawn(spawnId)
             easing = W2F.EaseOutCubic,
         },
         {
-            from = hoverTarget,
+            mode = 'descent',
+            from = aboveTarget,
             to = vector3(coords.x + 2.0, coords.y + 2.0, coords.z + 6.0),
             lookAt = groundLook,
             duration = sky.descendDurationMs,
@@ -193,6 +195,7 @@ function W2F.Spawner.FinalizeSpawn(character, coords)
 
     W2F.Selection.active = false
     W2F.State.isInSelection = false
+    W2F.State.isTransitioningToSky = false
     W2F.State.isSpawning = false
     W2F.State.isSkySpawnMode = false
     W2F.ResetState()

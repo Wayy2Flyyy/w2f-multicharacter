@@ -116,6 +116,7 @@ end
 function W2F.SetSelectionFocus(hasCursor, keepGameInput)
     local cursor = hasCursor == true
     local keepInput = keepGameInput == true
+    W2F.State.nuiFocused = cursor
     SetNuiFocus(cursor, cursor)
     if SetNuiFocusKeepInput then
         SetNuiFocusKeepInput(keepInput)
