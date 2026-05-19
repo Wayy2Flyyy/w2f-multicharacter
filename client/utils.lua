@@ -73,7 +73,8 @@ function W2F.ScreenToWorldRay()
         + right * ((normX - 0.5) * 2.0 * tanFov * aspect)
         + up * ((0.5 - normY) * 2.0 * tanFov)
     local len = math.sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z)
-  return camPos, vector3(dir.x / len, dir.y / len, dir.z / len)
+    if len < 0.0001 then len = 1.0 end
+    return camPos, vector3(dir.x / len, dir.y / len, dir.z / len)
 end
 
 function W2F.RotationToDirection(rot)
