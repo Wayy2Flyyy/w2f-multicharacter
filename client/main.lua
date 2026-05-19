@@ -17,12 +17,6 @@ local function beginTutorialSession()
     end
 end
 
-local function setSelectionBucket()
-    if SetPlayerRoutingBucket then
-        SetPlayerRoutingBucket(PlayerId(), PlayerId())
-    end
-end
-
 function W2F.EnterSelection()
     if W2F.Selection.active then return end
     W2F.Selection.active = true
@@ -32,7 +26,9 @@ function W2F.EnterSelection()
 
     preparePlayer()
     beginTutorialSession()
-    setSelectionBucket()
+    if Config.General.UseRoutingBuckets then
+        TriggerServerEvent('w2f-multicharacter:server:setSelectionBucket')
+    end
 
     ShutdownLoadingScreen()
     ShutdownLoadingScreenNui()
@@ -48,7 +44,10 @@ function W2F.EnterSelection()
     DisplayRadar(false)
 
     W2F.SetSelectionFocus(true, true) -- cursor on, game input for ped clicks
-    W2F.SendNui('showSelection', { maxSlots = #Config.Scene.pedSlots })
+    W2F.SendNui('showSelection', {
+        maxSlots = #Config.Scene.pedSlots,
+        showControlHints = Config.UI.showControlHints,
+    })
     W2F.SendNui('hideCharacterDetails', {})
     W2F.SendNui('hideSkySpawnOptions', {})
 
