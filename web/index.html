@@ -9,17 +9,20 @@
 <body>
     <div id="app" class="app hidden">
         <div id="hint" class="hint">
-            <span>Hold <kbd>LMB</kbd> to orbit camera</span>
-            <span>Click a character to view details</span>
+            <span>Hold <kbd>LMB</kbd> — Move Camera</span>
+            <span>Click Character — Select</span>
+            <span><kbd>ESC</kbd> — Back</span>
         </div>
 
         <section id="detailsPanel" class="details-panel hidden" aria-live="polite">
+            <div class="panel-scanlines"></div>
             <div class="panel-glow"></div>
             <header class="panel-header">
                 <h1 id="charName">—</h1>
                 <p id="charJob" class="sub">—</p>
             </header>
             <dl class="panel-stats">
+                <div><dt>Slot</dt><dd id="charSlot">—</dd></div>
                 <div><dt>Cash</dt><dd id="charCash">—</dd></div>
                 <div><dt>Bank</dt><dd id="charBank">—</dd></div>
                 <div><dt>Playtime</dt><dd id="charPlaytime">—</dd></div>

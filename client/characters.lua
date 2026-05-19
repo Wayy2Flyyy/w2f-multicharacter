@@ -1,4 +1,47 @@
 W2F.Characters = {}
+W2F.Characters.activeSceneProfile = 'neutral'
+local fallbackScenarios = {
+    'WORLD_HUMAN_STAND_IMPATIENT',
+    'WORLD_HUMAN_STAND_MOBILE',
+    'WORLD_HUMAN_HANG_OUT_STREET',
+    'WORLD_HUMAN_LEANING',
+}
+
+local function getProfileForCharacter(character)
+    local defaultProfile = 'neutral'
+    if not character then return defaultProfile end
+    local job = character.job or {}
+    local jobName = string.lower(tostring(job.name or job.type or 'unemployed'))
+    local mapped = Config.SceneJobMap and Config.SceneJobMap[jobName]
+    if mapped and Config.SceneProfiles and Config.SceneProfiles[mapped] then
+        return mapped
+    end
+    return defaultProfile
+end
+
+local function applySceneLighting(profileName)
+    local profile = Config.SceneProfiles and Config.SceneProfiles[profileName]
+    local lighting = profile and profile.lighting or 'clean'
+
+    if lighting == 'emergency' then
+        SetTimecycleModifier('MP_corona_heist_blend')
+        SetTimecycleModifierStrength(0.30)
+    elseif lighting == 'medical' then
+        SetTimecycleModifier('int_hospital2_dm')
+        SetTimecycleModifierStrength(0.24)
+    elseif lighting == 'garage' then
+        SetTimecycleModifier('int_carrier_hanger')
+        SetTimecycleModifierStrength(0.20)
+    elseif lighting == 'dark' then
+        SetTimecycleModifier('V_FIB_IT3')
+        SetTimecycleModifierStrength(0.32)
+    else
+        SetTimecycleModifier('MP_corona_heist_blend')
+        SetTimecycleModifierStrength(0.22)
+    end
+
+    W2F.Characters.activeSceneProfile = profileName or 'neutral'
+end
 
 local function loadModel(model)
     local hash = type(model) == 'string' and joaat(model) or model
@@ -16,6 +59,11 @@ local function resolveModel(character)
     end
 
     local appearance
+    local cid = character and character.citizenid or nil
+    if cid and W2F.State.modelCache[cid] then
+        return W2F.State.modelCache[cid], W2F.State.appearanceCache[cid]
+    end
+
     if character and character.citizenid and W2F.Qbox.IsActive() then
         local qbxModel, qbxAppearance = W2F.Qbox.GetPreviewPedData(character.citizenid)
         if qbxModel then
@@ -29,6 +77,11 @@ local function resolveModel(character)
         end
     end
 
+    if cid then
+        W2F.State.modelCache[cid] = model
+        W2F.State.appearanceCache[cid] = appearance
+    end
+
     return model, appearance
 end
 
@@ -40,6 +93,8 @@ function W2F.Characters.ClearPreviewPeds()
         end
     end
     W2F.State.previewPeds = {}
+    W2F.State.hoveredPed = nil
+    W2F.State.selectedPed = nil
 end
 
 function W2F.Characters.ApplyHighlight(ped, mode)
@@ -49,7 +104,8 @@ function W2F.Characters.ApplyHighlight(ped, mode)
     if mode == 'selected' then
         SetEntityDrawOutline(ped, true)
         SetEntityDrawOutlineColor(hl.selectedColor.r, hl.selectedColor.g, hl.selectedColor.b, 255)
-        ResetEntityAlpha(ped)
+        local pulse = 225 + math.floor((math.sin(GetGameTimer() * 0.006) * 0.5 + 0.5) * 30)
+        SetEntityAlpha(ped, pulse, false)
     elseif mode == 'hover' then
         SetEntityDrawOutline(ped, true)
         SetEntityDrawOutlineColor(hl.outlineColor.r, hl.outlineColor.g, hl.outlineColor.b, 180)
@@ -90,7 +146,10 @@ function W2F.Characters.SpawnPreviewPed(slotIndex, character)
     SetEntityCollision(ped, true, true)
 
     W2F.Qbox.ApplyAppearanceToPed(ped, hash, appearance)
-    TaskStartScenarioInPlace(ped, 'WORLD_HUMAN_STAND_IMPATIENT', 0, true)
+    local profileName = getProfileForCharacter(character)
+    local profile = Config.SceneProfiles and Config.SceneProfiles[profileName]
+    local scenario = (profile and profile.animation) or fallbackScenarios[((slotIndex - 1) % #fallbackScenarios) + 1]
+    TaskStartScenarioInPlace(ped, scenario, 0, true)
 
     W2F.State.previewPeds[slotIndex] = {
         ped = ped,
@@ -105,6 +164,7 @@ end
 function W2F.Characters.BuildLineup(characters)
     W2F.Characters.ClearPreviewPeds()
     W2F.State.characters = characters or {}
+    applySceneLighting('neutral')
 
     for slot, character in pairs(characters) do
         if type(slot) == 'number' and character then
@@ -115,7 +175,7 @@ end
 
 function W2F.Characters.FindPedNearRay(origin, direction)
     local bestSlot, bestEntry, bestDist = nil, nil, nil
-    local maxDist = Config.Interaction.rayMaxDistance
+    local maxDist = Config.Interaction.hoverDistance or Config.Interaction.rayMaxDistance
     local selectRadius = Config.Interaction.pedSelectRadius
 
     for slot, entry in pairs(W2F.State.previewPeds) do
@@ -176,15 +236,31 @@ end
 
 function W2F.Characters.SelectSlot(slot, entry)
     if not entry or not entry.character then return end
-    W2F.MarkClick()
+    if W2F.State.selectedSlot == slot and W2F.State.selectedPed == entry.ped then
+        return
+    end
+    local citizenid = entry.character.citizenid
+    local accepted = lib.callback.await('w2f-multicharacter:server:selectCharacter', false, citizenid)
+    if not accepted then
+        W2F.PlayFrontendSound('ERROR')
+        return
+    end
+
+    W2F.MarkPedClick()
+    W2F.PlayW2FSound(Config.Audio.select)
     W2F.SetSelected(slot, entry.ped, entry.character)
+    applySceneLighting(getProfileForCharacter(entry.character))
+    W2F.Camera.FocusOnPed(entry.ped)
     W2F.Characters.RefreshHighlights()
     W2F.SendNui('showCharacterDetails', W2F.Characters.GetDetailsPayload(entry.character))
+    W2F.PlayW2FSound(Config.Audio.detailsOpen)
     W2F.SendNui('updateSelectedPed', { slot = slot })
 end
 
 function W2F.Characters.ClearSelection()
     W2F.SetSelected(nil, nil, nil)
+    applySceneLighting('neutral')
+    W2F.Camera.ReturnToOverview()
     W2F.Characters.RefreshHighlights()
     W2F.SendNui('hideCharacterDetails', {})
     W2F.SendNui('updateSelectedPed', { slot = nil })
