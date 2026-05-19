@@ -223,7 +223,10 @@ end
 
 function W2F.Characters.SelectSlot(slot, entry)
     if not entry or not entry.character then return end
-    W2F.MarkClick()
+    if W2F.State.selectedSlot == slot and W2F.State.selectedPed == entry.ped then
+        return
+    end
+    W2F.MarkPedClick()
     W2F.SetSelected(slot, entry.ped, entry.character)
     applySceneLighting(getProfileForCharacter(entry.character))
     W2F.Camera.FocusOnPed(entry.ped)

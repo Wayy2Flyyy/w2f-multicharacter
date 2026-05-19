@@ -14,6 +14,7 @@ W2F.State = {
     dragStartY = nil,
     hoveredPed = nil,
     hoveredSlot = nil,
+    isHoveringPed = false,
     selectedPed = nil,
     selectedSlot = nil,
     selectedCharacter = nil,
@@ -23,7 +24,9 @@ W2F.State = {
     isSpawning = false,
     nuiFocused = false,
     cameraActive = false,
+    clickDebounce = 350,
     lastClickTime = 0,
+    lastPedClickTime = 0,
     characters = {},
     previewPeds = {},
 }
@@ -38,6 +41,7 @@ function W2F.ResetState()
     s.dragStartY = nil
     s.hoveredPed = nil
     s.hoveredSlot = nil
+    s.isHoveringPed = false
     s.selectedPed = nil
     s.selectedSlot = nil
     s.selectedCharacter = nil
@@ -47,7 +51,9 @@ function W2F.ResetState()
     s.isSpawning = false
     s.nuiFocused = false
     s.cameraActive = false
+    s.clickDebounce = Config.Interaction.clickDebounceMs
     s.lastClickTime = 0
+    s.lastPedClickTime = 0
     s.characters = {}
     s.previewPeds = {}
 end
@@ -55,6 +61,7 @@ end
 function W2F.SetHovered(slot, ped)
     W2F.State.hoveredPed = ped
     W2F.State.hoveredSlot = slot
+    W2F.State.isHoveringPed = ped ~= nil
 end
 
 function W2F.SetSelected(slot, ped, character)
@@ -65,9 +72,15 @@ function W2F.SetSelected(slot, ped, character)
 end
 
 function W2F.CanClick()
-    return (GetGameTimer() - W2F.State.lastClickTime) >= Config.Interaction.clickDebounceMs
+    return (GetGameTimer() - W2F.State.lastClickTime) >= (W2F.State.clickDebounce or Config.Interaction.clickDebounceMs)
 end
 
 function W2F.MarkClick()
     W2F.State.lastClickTime = GetGameTimer()
+end
+
+function W2F.MarkPedClick()
+    local now = GetGameTimer()
+    W2F.State.lastClickTime = now
+    W2F.State.lastPedClickTime = now
 end
