@@ -378,3 +378,7 @@ function W2F.Camera.GetRenderedTransform()
     end
     return GetGameplayCamCoord(), GetGameplayCamRot(2)
 end
+    if step.mode and W2F.Camera.mode ~= step.mode then
+        W2F.Camera.mode = step.mode
+        syncModeState(step.mode)
+    end
