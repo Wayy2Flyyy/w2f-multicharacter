@@ -89,6 +89,7 @@ function W2F.Interaction.UpdatePedTargeting()
             W2F.SetHovered(slot, entry.ped)
             W2F.Characters.RefreshHighlights()
             W2F.SendNui('updateHoveredPed', { slot = slot })
+            W2F.PlayW2FSound(Config.Audio.hover)
         end
     elseif W2F.State.hoveredPed then
         W2F.SetHovered(nil, nil)

@@ -52,6 +52,32 @@ function W2F.PlayFrontendSound(soundName)
     PlaySoundFrontend(-1, soundName or 'SELECT', 'HUD_FRONTEND_DEFAULT_SOUNDSET', true)
 end
 
+function W2F.PlayW2FSound(soundName)
+    if not Config.Audio or Config.Audio.enabled == false then
+        return
+    end
+
+    if not soundName or soundName == '' then
+        return
+    end
+
+    local map = {
+        ui_hover = 'NAV_UP_DOWN',
+        ui_select = 'SELECT',
+        ui_details_open = 'NAV_LEFT_RIGHT',
+        ui_spawn_press = 'SELECT',
+        sky_launch = 'Zoom_In',
+        location_select = 'WAYPOINT_SET',
+        descent_pulse = '3_2_1',
+        final_spawn = 'BACK',
+    }
+
+    local frontend = map[soundName] or soundName
+    pcall(function()
+        PlaySoundFrontend(-1, frontend, 'HUD_FRONTEND_DEFAULT_SOUNDSET', true)
+    end)
+end
+
 function W2F.RotationToDirection(rot)
     local z = math.rad(rot.z)
     local x = math.rad(rot.x)

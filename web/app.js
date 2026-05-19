@@ -87,9 +87,13 @@ function buildSkyCards(spawns) {
             if (spawnBusy) return;
             spawnBusy = true;
             card.classList.add('selected');
+            skySpawnPanel.classList.add('closing');
             post('chooseSkySpawn', { id: spawn.id });
         });
-        card.addEventListener('mouseenter', () => card.classList.add('hover'));
+        card.addEventListener('mouseenter', () => {
+            card.classList.add('hover');
+            post('spawnLocationHover');
+        });
         card.addEventListener('mouseleave', () => card.classList.remove('hover'));
         skySpawnGrid.appendChild(card);
     });
@@ -107,6 +111,7 @@ function showSkySpawnOptions(data) {
 
 function hideSkySpawnOptions() {
     skyMode = false;
+    skySpawnPanel.classList.remove('closing');
     skySpawnPanel.classList.remove('fade-in');
     setVisible(skySpawnPanel, false);
 }

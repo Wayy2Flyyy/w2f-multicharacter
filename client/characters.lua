@@ -104,7 +104,8 @@ function W2F.Characters.ApplyHighlight(ped, mode)
     if mode == 'selected' then
         SetEntityDrawOutline(ped, true)
         SetEntityDrawOutlineColor(hl.selectedColor.r, hl.selectedColor.g, hl.selectedColor.b, 255)
-        ResetEntityAlpha(ped)
+        local pulse = 225 + math.floor((math.sin(GetGameTimer() * 0.006) * 0.5 + 0.5) * 30)
+        SetEntityAlpha(ped, pulse, false)
     elseif mode == 'hover' then
         SetEntityDrawOutline(ped, true)
         SetEntityDrawOutlineColor(hl.outlineColor.r, hl.outlineColor.g, hl.outlineColor.b, 180)
@@ -246,11 +247,13 @@ function W2F.Characters.SelectSlot(slot, entry)
     end
 
     W2F.MarkPedClick()
+    W2F.PlayW2FSound(Config.Audio.select)
     W2F.SetSelected(slot, entry.ped, entry.character)
     applySceneLighting(getProfileForCharacter(entry.character))
     W2F.Camera.FocusOnPed(entry.ped)
     W2F.Characters.RefreshHighlights()
     W2F.SendNui('showCharacterDetails', W2F.Characters.GetDetailsPayload(entry.character))
+    W2F.PlayW2FSound(Config.Audio.detailsOpen)
     W2F.SendNui('updateSelectedPed', { slot = slot })
 end
 

@@ -225,6 +225,18 @@ Config.Spawn = {
     descentTimeMs = Config.SpawnCinematic.descendDurationMs,
 }
 
+Config.Audio = {
+    enabled = true,
+    hover = 'ui_hover',
+    select = 'ui_select',
+    detailsOpen = 'ui_details_open',
+    spawnPress = 'ui_spawn_press',
+    skyLaunch = 'sky_launch',
+    locationSelect = 'location_select',
+    descentPulse = 'descent_pulse',
+    finalSpawn = 'final_spawn',
+}
+
 Config.Scenes = {
     jobMappings = Config.SceneJobMap,
     fallbackScene = 'neutral',

@@ -47,6 +47,7 @@ function W2F.Spawner.BeginSkySequence()
     W2F.SetHovered(nil, nil)
 
     W2F.SendNui('beginSpawnSequence', {})
+    W2F.PlayW2FSound(Config.Audio.spawnPress)
     W2F.SendNui('hideCharacterDetails', {})
     W2F.SendNui('hideSelectionHints', {})
 
@@ -61,7 +62,7 @@ function W2F.Spawner.BeginSkySequence()
     local skyPos = vector3(focal.x, focal.y, focal.z + sky.skyHeight)
 
     W2F.Camera.mode = 'cinematic'
-    W2F.PlayFrontendSound('Zoom_In')
+    W2F.PlayW2FSound(Config.Audio.skyLaunch)
 
     W2F.Camera.RunCinematic({
         {
@@ -81,7 +82,7 @@ function W2F.Spawner.BeginSkySequence()
         W2F.SendNui('showSkySpawnOptions', {
             spawns = Config.GetSpawnOptionsForNui(),
         })
-        W2F.PlayFrontendSound('SELECT')
+        W2F.PlayW2FSound(Config.Audio.locationSelect)
     end)
 end
 
@@ -107,7 +108,7 @@ function W2F.Spawner.FlyToSpawn(spawnId)
     local groundLook = vector3(coords.x, coords.y, coords.z)
     local travelDistance = #(aboveTarget - camPos)
 
-    W2F.PlayFrontendSound('WAYPOINT_SET')
+    W2F.PlayW2FSound(Config.Audio.locationSelect)
 
     local headingFrom = 0.0
     if W2F.Camera.handle and DoesCamExist(W2F.Camera.handle) then
@@ -123,6 +124,15 @@ function W2F.Spawner.FlyToSpawn(spawnId)
         SetCamFov(W2F.Camera.handle, sky.fovSky)
         DoScreenFadeIn(sky.travelFadeInMs or 420)
     end
+
+    CreateThread(function()
+        while W2F.State.isSpawning and not W2F.State.isSkySpawnMode do
+            Wait(900)
+            if W2F.Camera.mode == 'descent' then
+                W2F.PlayW2FSound(Config.Audio.descentPulse)
+            end
+        end
+    end)
 
     W2F.Camera.RunCinematic({
         {
@@ -215,7 +225,7 @@ function W2F.Spawner.FinalizeSpawn(character, coords)
 
     Wait(400)
     DoScreenFadeIn(sky.fadeInMs)
-    W2F.PlayFrontendSound('BACK')
+    W2F.PlayW2FSound(Config.Audio.finalSpawn)
 end
 
 RegisterNUICallback('pressSpawn', function(_, cb)
@@ -230,5 +240,10 @@ RegisterNUICallback('chooseSkySpawn', function(data, cb)
     if spawnId and spawnId ~= '' and W2F.State.isSkySpawnMode then
         W2F.Spawner.FlyToSpawn(spawnId)
     end
+    cb('ok')
+end)
+
+RegisterNUICallback('spawnLocationHover', function(_, cb)
+    W2F.PlayW2FSound(Config.Audio.hover)
     cb('ok')
 end)

@@ -204,6 +204,11 @@ html, body {
     background: linear-gradient(180deg, rgba(120, 200, 255, 0.4), rgba(120, 200, 255, 0.2));
     transform: translateY(-1px);
 }
+.btn-primary:active,
+.btn-ghost:active,
+.sky-card:active {
+    transform: scale(0.985);
+}
 
 .btn-ghost {
     padding: 0.62rem 0.82rem;
@@ -233,6 +238,11 @@ html, body {
 
 .sky-panel.fade-in {
     animation: skyIn 0.5s ease forwards;
+}
+.sky-panel.closing {
+    opacity: 0;
+    transform: translateX(-50%) translateY(0.4rem);
+    transition: opacity 0.22s ease, transform 0.22s ease;
 }
 
 .sky-title {
