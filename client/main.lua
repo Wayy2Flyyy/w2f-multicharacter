@@ -17,12 +17,6 @@ local function beginTutorialSession()
     end
 end
 
-local function setSelectionBucket()
-    if SetPlayerRoutingBucket then
-        SetPlayerRoutingBucket(PlayerId(), PlayerId())
-    end
-end
-
 function W2F.EnterSelection()
     if W2F.Selection.active then return end
     W2F.Selection.active = true
@@ -32,7 +26,7 @@ function W2F.EnterSelection()
 
     preparePlayer()
     beginTutorialSession()
-    setSelectionBucket()
+    TriggerServerEvent('w2f-multicharacter:server:setSelectionBucket')
 
     ShutdownLoadingScreen()
     ShutdownLoadingScreenNui()
