@@ -99,3 +99,104 @@ AddEventHandler('onResourceStop', function(resource)
     if resource ~= GetCurrentResourceName() then return end
     W2F.CloseSelection()
 end)
+
+local function debugPrintState()
+    local s = W2F.State
+    local routingBucket = 'n/a'
+    if GetPlayerRoutingBucket then
+        local ok, bucket = pcall(GetPlayerRoutingBucket, PlayerId())
+        if ok and bucket then
+            routingBucket = tostring(bucket)
+        end
+    end
+
+    local previewCount = 0
+    for _ in pairs(s.previewPeds or {}) do
+        previewCount = previewCount + 1
+    end
+
+    local selectedCid = s.selectedCharacter and s.selectedCharacter.citizenid or 'nil'
+    local hoveredExists = s.hoveredPed and DoesEntityExist(s.hoveredPed) or false
+    local selectedExists = s.selectedPed and DoesEntityExist(s.selectedPed) or false
+
+    print(('[w2f-multicharacter][debug] isInSelection=%s | hoveredPed=%s | selectedPed=%s | selectedCharacter=%s | cameraMode=%s | isDraggingCamera=%s | isSkySpawnMode=%s | isSpawning=%s | nuiFocused=%s | routingBucket=%s | previewPeds=%s | activeProps=%s'):format(
+        tostring(s.isInSelection),
+        tostring(hoveredExists),
+        tostring(selectedExists),
+        tostring(selectedCid),
+        tostring(W2F.Camera and W2F.Camera.mode or 'nil'),
+        tostring(s.isDraggingCamera),
+        tostring(s.isSkySpawnMode),
+        tostring(s.isSpawning),
+        tostring(s.nuiFocused),
+        routingBucket,
+        tostring(previewCount),
+        '0'
+    ))
+end
+
+local function debugReloadScene()
+    if not W2F.State.isInSelection then
+        W2F.EnterSelection()
+        return
+    end
+
+    W2F.Cleanup.Visuals()
+    local characters = W2F.Qbox.FetchCharacters()
+    W2F.Characters.BuildLineup(characters)
+    W2F.SetSelectionFocus(true, true)
+    W2F.SendNui('showSelection', {
+        maxSlots = #Config.Scene.pedSlots,
+        showControlHints = Config.UI.showControlHints,
+    })
+    W2F.SendNui('hideCharacterDetails', {})
+    W2F.SendNui('hideSkySpawnOptions', {})
+    W2F.Camera.PlayIntro()
+    W2F.Interaction.StartLoop()
+end
+
+if Config.Debug then
+    RegisterCommand('w2fmc_debug', function()
+        debugPrintState()
+    end, false)
+
+    RegisterCommand('w2fmc_state', function()
+        debugPrintState()
+    end, false)
+
+    RegisterCommand('w2fmc_resetcam', function()
+        if not W2F.State.isInSelection then return end
+        W2F.Camera.ReturnToOverview()
+    end, false)
+
+    RegisterCommand('w2fmc_cleanup', function()
+        W2F.Cleanup.Full(false)
+    end, false)
+
+    RegisterCommand('w2fmc_testspawn', function(_, args)
+        if not W2F.State.isInSelection or not W2F.State.selectedCharacter then
+            print('[w2f-multicharacter][debug] select a character first')
+            return
+        end
+        if W2F.State.isSpawning then return end
+        local spawnId = (args and args[1]) or 'public'
+        if not W2F.State.isSkySpawnMode then
+            W2F.Spawner.BeginSkySequence()
+            CreateThread(function()
+                local timeout = GetGameTimer() + 8000
+                while not W2F.State.isSkySpawnMode and GetGameTimer() < timeout do
+                    Wait(50)
+                end
+                if W2F.State.isSkySpawnMode then
+                    W2F.Spawner.FlyToSpawn(spawnId)
+                end
+            end)
+            return
+        end
+        W2F.Spawner.FlyToSpawn(spawnId)
+    end, false)
+
+    RegisterCommand('w2fmc_reloadscene', function()
+        debugReloadScene()
+    end, false)
+end
