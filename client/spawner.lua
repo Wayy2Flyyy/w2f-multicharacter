@@ -1,4 +1,9 @@
 W2F.Spawner = {}
+W2F.Spawner.previewLoopActive = false
+W2F.Spawner.previewAnchor = nil
+W2F.Spawner.previewTargets = {}
+W2F.Spawner.previewHoveredId = nil
+W2F.Spawner.previewCurrentLookAt = nil
 
 function W2F.Spawner.ResolveSpawnCoords(spawnId, character)
     local citizenid = character and character.citizenid or nil
@@ -9,12 +14,67 @@ function W2F.Spawner.ResolveSpawnCoords(spawnId, character)
     return vec4(resolved.x, resolved.y, resolved.z, resolved.w or 0.0)
 end
 
+local function buildSpawnPreviewCache()
+    W2F.Spawner.previewTargets = {}
+    if not W2F.State.selectedCharacter then return end
+    for i = 1, #Config.Spawns do
+        local spawn = Config.Spawns[i]
+        local coords = W2F.Spawner.ResolveSpawnCoords(spawn.id, W2F.State.selectedCharacter)
+        if coords then
+            W2F.Spawner.previewTargets[spawn.id] = vector3(coords.x, coords.y, coords.z)
+        end
+    end
+end
+
+local function startSpawnPreviewLoop()
+    if W2F.Spawner.previewLoopActive or not Config.SpawnPreview.enabled then return end
+    W2F.Spawner.previewLoopActive = true
+    W2F.Spawner.previewAnchor = Config.GetSceneFocal()
+    W2F.Spawner.previewCurrentLookAt = W2F.Spawner.previewAnchor
+    buildSpawnPreviewCache()
+
+    CreateThread(function()
+        while W2F.Spawner.previewLoopActive and W2F.State.isSkySpawnMode do
+            if W2F.Camera.handle and DoesCamExist(W2F.Camera.handle) and W2F.Camera.mode == 'sky' then
+                local target = W2F.Spawner.previewAnchor
+                local hovered = W2F.Spawner.previewHoveredId
+                if hovered and W2F.Spawner.previewTargets[hovered] then
+                    local t = W2F.Spawner.previewTargets[hovered]
+                    local s = Config.SpawnPreview.hoverPreviewStrength
+                    target = vector3(
+                        W2F.Spawner.previewAnchor.x + ((t.x - W2F.Spawner.previewAnchor.x) * s),
+                        W2F.Spawner.previewAnchor.y + ((t.y - W2F.Spawner.previewAnchor.y) * s),
+                        W2F.Spawner.previewAnchor.z + ((t.z - W2F.Spawner.previewAnchor.z) * (s * 0.65))
+                    )
+                end
+
+                local speed = Config.SpawnPreview.hoverPreviewSpeed
+                local cur = W2F.Spawner.previewCurrentLookAt or target
+                W2F.Spawner.previewCurrentLookAt = vector3(
+                    W2F.SmoothStep(cur.x, target.x, speed),
+                    W2F.SmoothStep(cur.y, target.y, speed),
+                    W2F.SmoothStep(cur.z, target.z, speed)
+                )
+
+                local camPos = GetCamCoord(W2F.Camera.handle)
+                local rot = W2F.Camera.GetLookAtRotation(camPos, W2F.Spawner.previewCurrentLookAt)
+                W2F.Camera.SetRotation(W2F.Camera.handle, rot)
+            end
+            Wait(0)
+        end
+        W2F.Spawner.previewLoopActive = false
+        W2F.Spawner.previewHoveredId = nil
+        W2F.Spawner.previewCurrentLookAt = nil
+    end)
+end
+
 function W2F.Spawner.RecoverFromFailedSpawn(message)
     W2F.State.isSpawning = false
     W2F.State.isTransitioningToSky = false
     W2F.State.isSkySpawnMode = false
     W2F.Camera.cinematic = nil
     W2F.Camera.mode = 'overview'
+    W2F.Spawner.previewLoopActive = false
 
     W2F.SendNui('spawnFailed', { message = message or 'Spawn failed. Try again.' })
 
@@ -79,6 +139,7 @@ function W2F.Spawner.BeginSkySequence()
         W2F.State.isTransitioningToSky = false
         W2F.State.isSkySpawnMode = true
         W2F.Camera.mode = 'sky'
+        startSpawnPreviewLoop()
         W2F.SendNui('showSkySpawnOptions', {
             spawns = Config.GetSpawnOptionsForNui(),
         })
@@ -100,6 +161,7 @@ function W2F.Spawner.FlyToSpawn(spawnId)
 
     W2F.State.selectedSpawn = spawnId
     W2F.State.isSkySpawnMode = false
+    W2F.Spawner.previewLoopActive = false
     W2F.SendNui('hideSkySpawnOptions', {})
 
     local sky = Config.SpawnCinematic
@@ -244,6 +306,19 @@ RegisterNUICallback('chooseSkySpawn', function(data, cb)
 end)
 
 RegisterNUICallback('spawnLocationHover', function(_, cb)
-    W2F.PlayW2FSound(Config.Audio.hover)
+    cb('ok')
+end)
+
+RegisterNUICallback('previewSkySpawn', function(data, cb)
+    if not Config.SpawnPreview.enabled or not W2F.State.isSkySpawnMode then
+        cb('ok')
+        return
+    end
+
+    local id = data and data.id or nil
+    W2F.Spawner.previewHoveredId = (id and id ~= '') and id or nil
+    if W2F.Spawner.previewHoveredId then
+        W2F.PlayW2FSound(Config.Audio.hover)
+    end
     cb('ok')
 end)

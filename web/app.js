@@ -92,9 +92,12 @@ function buildSkyCards(spawns) {
         });
         card.addEventListener('mouseenter', () => {
             card.classList.add('hover');
-            post('spawnLocationHover');
+            post('previewSkySpawn', { id: spawn.id });
         });
-        card.addEventListener('mouseleave', () => card.classList.remove('hover'));
+        card.addEventListener('mouseleave', () => {
+            card.classList.remove('hover');
+            post('previewSkySpawn', { id: null });
+        });
         skySpawnGrid.appendChild(card);
     });
 }
@@ -111,6 +114,7 @@ function showSkySpawnOptions(data) {
 
 function hideSkySpawnOptions() {
     skyMode = false;
+    post('previewSkySpawn', { id: null });
     skySpawnPanel.classList.remove('closing');
     skySpawnPanel.classList.remove('fade-in');
     setVisible(skySpawnPanel, false);

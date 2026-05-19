@@ -237,6 +237,12 @@ Config.Audio = {
     finalSpawn = 'final_spawn',
 }
 
+Config.SpawnPreview = {
+    enabled = true,
+    hoverPreviewStrength = 0.25,
+    hoverPreviewSpeed = 0.08,
+}
+
 Config.Scenes = {
     jobMappings = Config.SceneJobMap,
     fallbackScene = 'neutral',
