@@ -33,13 +33,13 @@ html, body {
 
 .visible, .app:not(.hidden) {
     opacity: 1;
-    pointer-events: none;
     visibility: visible;
 }
 
 .app {
     position: fixed;
     inset: 0;
+    pointer-events: none;
     transition: opacity 0.35s ease;
 }
 

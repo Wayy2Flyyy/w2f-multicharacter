@@ -1,45 +1,57 @@
 # w2f-multicharacter
 
-Cinematic multicharacter selection for **Qbox** (`qbx_core`). Premium overview camera, left-click orbit controls, cursor ped selection, and sky-based spawn cinematics.
+Cinematic multicharacter selection for **Qbox** with overview camera orbit, cursor ped picking, and sky spawn cinematics.
+
+## Qbox setup (required)
+
+In `qbx_core/config/client.lua` set:
+
+```lua
+characters = {
+    useExternalCharacters = true,
+    -- ...
+}
+```
+
+Then in this resource `config.lua`:
+
+```lua
+Config.UseExternalCharacters = true
+Config.AutoOpen = true
+```
+
+Without `useExternalCharacters`, **both** this resource and qbx_core will fight over character selection on join.
 
 ## Features
 
-- Fixed cinematic overview showing the full character lineup
-- Hold **left click** + mouse to orbit (yaw/pitch/distance clamped, smoothed)
-- Click peds to select; character details appear only after selection
-- **Spawn** sends the camera to the sky, then four spawn locations (Last Location, Police Station, Public Centre, Hospital)
-- Interpolated fly-to and float-down spawn sequence
+- Cinematic intro into a fixed overview of all preview peds
+- Hold **LMB** + move mouse: clamped, smoothed orbit camera
+- Click peds to select; details panel only after click
+- **Spawn** → sky rise → 4 spawn cards → fly-down cinematic → `qbx_core:server:loadCharacter`
 
 ## Dependencies
 
 - [ox_lib](https://github.com/overextended/ox_lib)
-- [oxmysql](https://github.com/overextended/oxmysql)
+- [oxmysql](https://github.com/overextended/oxmysql) (fallback character/appearance queries)
 - [qbx_core](https://github.com/Qbox-project/qbx_core)
-- Optional: `illenium-appearance` for preview ped skins
-
-## Install
-
-1. Place in your `resources` folder and add `ensure w2f-multicharacter` **after** `qbx_core`.
-2. Disable or remove default `qbx` multicharacter UI overlap if another resource handles character select.
-3. Tune `config.lua` — especially `Config.Scene.focal`, `Config.Scene.pedSlots`, and `Config.Spawns`.
+- Optional: [illenium-appearance](https://github.com/iLLeniumStudios/illenium-appearance)
 
 ## Configuration
 
-| Section | Purpose |
-|--------|---------|
-| `Config.Scene` | Ped lineup positions and camera focal point |
-| `Config.CameraControl` | Orbit sensitivity, limits, smoothing |
-| `Config.Spawns` | Sky spawn locations and last-location fallback |
-| `Config.SpawnCinematic` | Sky rise, fly, hover, and descend timings |
+| Key | Purpose |
+|-----|---------|
+| `Config.Scene.pedSlots` | Preview ped positions (vec4) |
+| `Config.GetSceneFocal()` | Auto center look-at from slots |
+| `Config.CameraControl` | Orbit limits, sensitivity, smoothing |
+| `Config.Spawns` | Sky spawn locations + last-location fallback |
 
-## Client files
+## Architecture
 
-- `client/camera.lua` — Overview + cinematic camera
-- `client/interaction.lua` — LMB drag, ped ray pick, click debounce
-- `client/characters.lua` — Preview peds and details payload
-- `client/spawner.lua` — Sky spawn flow
-- `web/` — Minimal details panel and sky spawn UI
-
-## Server
-
-Thin Qbox integration only: character list, appearance fetch, last location, and `Login` on spawn. No duplicate character database logic.
+| File | Role |
+|------|------|
+| `client/camera.lua` | Overview orbit, intro, cinematics |
+| `client/interaction.lua` | LMB drag, ray pick, debounced clicks |
+| `client/characters.lua` | Preview peds, highlights, details payload |
+| `client/spawner.lua` | Sky spawn flow and finalize |
+| `client/qbox.lua` | Qbox callbacks (characters, preview, load) |
+| `server/main.lua` | MySQL fallback only when Qbox data unavailable |
