@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>W2F Character Selection</title>
+    <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+    <div id="app" class="app hidden">
+        <div id="hint" class="hint">
+            <span>Hold <kbd>LMB</kbd> to orbit camera</span>
+            <span>Click a character to view details</span>
+        </div>
+
+        <section id="detailsPanel" class="details-panel hidden" aria-live="polite">
+            <div class="panel-glow"></div>
+            <header class="panel-header">
+                <h1 id="charName">—</h1>
+                <p id="charJob" class="sub">—</p>
+            </header>
+            <dl class="panel-stats">
+                <div><dt>Cash</dt><dd id="charCash">—</dd></div>
+                <div><dt>Bank</dt><dd id="charBank">—</dd></div>
+                <div><dt>Playtime</dt><dd id="charPlaytime">—</dd></div>
+                <div><dt>Last Location</dt><dd id="charLocation">—</dd></div>
+            </dl>
+            <footer class="panel-actions">
+                <button id="spawnBtn" type="button" class="btn-primary">Spawn</button>
+                <button id="closeDetailsBtn" type="button" class="btn-ghost">Close</button>
+            </footer>
+        </section>
+
+        <section id="skySpawnPanel" class="sky-panel hidden" aria-label="Spawn location">
+            <h2 class="sky-title">Choose spawn location</h2>
+            <div id="skySpawnGrid" class="sky-grid"></div>
+        </section>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
