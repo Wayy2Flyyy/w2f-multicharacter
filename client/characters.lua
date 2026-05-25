@@ -3,12 +3,43 @@ W2F.Characters.activeSceneProfile = 'neutral'
 W2F.Characters.lastPlayedCitizenid = nil
 W2F.Characters.sceneStreamHandle = nil
 W2F.Characters._highlightState = {}
+W2F.Characters._outlineUnsafe = {}
 local fallbackScenarios = {
     'WORLD_HUMAN_STAND_IMPATIENT',
     'WORLD_HUMAN_STAND_MOBILE',
     'WORLD_HUMAN_HANG_OUT_STREET',
     'WORLD_HUMAN_LEANING',
 }
+
+local FREEMODE_MALE = `mp_m_freemode_01`
+local FREEMODE_FEMALE = `mp_f_freemode_01`
+
+local function isFreemodePedModel(model)
+    return model == FREEMODE_MALE or model == FREEMODE_FEMALE
+end
+
+--- Outline shader crashes on hover for stock freemode on many FiveM builds;
+--- addon/custom ped models are usually safe. Returns true to skip outline natives.
+local function shouldUseAlphaHighlightOnly(ped)
+    local hl = Config.Highlight or {}
+
+    if hl.enabled == false then
+        return true
+    end
+
+    if W2F.Performance and W2F.Performance.active and W2F.Performance.effective then
+        if W2F.Performance.effective.useAlphaHighlightFallback then
+            return true
+        end
+    end
+
+    if hl.alphaForFreemode ~= false and isFreemodePedModel(GetEntityModel(ped)) then
+        return true
+    end
+
+    local unsafe = W2F.Characters._outlineUnsafe
+    return unsafe and unsafe[ped] == true or false
+end
 
 local function getProfileForCharacter(character)
     local defaultProfile = 'neutral'
@@ -107,6 +138,7 @@ function W2F.Characters.ClearPreviewPeds()
     end
     W2F.Characters._heldAnimDicts = heldDicts
     W2F.Characters._highlightState = {}
+    W2F.Characters._outlineUnsafe = {}
     W2F.State.previewPeds = {}
     W2F.State.hoveredPed = nil
     W2F.State.selectedPed = nil
@@ -163,7 +195,7 @@ function W2F.Characters.ApplyHighlight(ped, mode, isEmpty)
     --- Safe fallback path: skip every outline native and use alpha only.
     --- Hover detection / selection / NUI details continue to function — only
     --- the visual outline rendering is short-circuited.
-    if hl.enabled == false then
+    if shouldUseAlphaHighlightOnly(ped) then
         applyHighlightAlphaOnly(ped, mode, isEmpty)
         return
     end
@@ -173,33 +205,31 @@ function W2F.Characters.ApplyHighlight(ped, mode, isEmpty)
     --- swap it without touching code.
     local shader = hl.outlineShader or 1
 
+    local function applyOutline(color)
+        pcall(SetEntityDrawOutline, ped, true)
+        pcall(SetEntityDrawOutlineColor, color.r, color.g, color.b, 255)
+        pcall(SetEntityDrawOutlineShader, shader)
+        ResetEntityAlpha(ped)
+    end
+
     if isEmpty and mode == 'hover' then
         local c = hl.emptyHoverColor or hl.outlineColor
-        SetEntityDrawOutline(ped, true)
-        SetEntityDrawOutlineColor(c.r, c.g, c.b, 255)
-        SetEntityDrawOutlineShader(shader)
-        ResetEntityAlpha(ped)
+        applyOutline(c)
         return
     end
 
     if isEmpty then
-        SetEntityDrawOutline(ped, false)
+        pcall(SetEntityDrawOutline, ped, false)
         SetEntityAlpha(ped, 140, false)
         return
     end
 
     if mode == 'selected' then
-        SetEntityDrawOutline(ped, true)
-        SetEntityDrawOutlineColor(hl.selectedColor.r, hl.selectedColor.g, hl.selectedColor.b, 255)
-        SetEntityDrawOutlineShader(shader)
-        ResetEntityAlpha(ped)
+        applyOutline(hl.selectedColor)
     elseif mode == 'hover' then
-        SetEntityDrawOutline(ped, true)
-        SetEntityDrawOutlineColor(hl.outlineColor.r, hl.outlineColor.g, hl.outlineColor.b, 255)
-        SetEntityDrawOutlineShader(shader)
-        ResetEntityAlpha(ped)
+        applyOutline(hl.outlineColor)
     else
-        SetEntityDrawOutline(ped, false)
+        pcall(SetEntityDrawOutline, ped, false)
         ResetEntityAlpha(ped)
     end
 end
