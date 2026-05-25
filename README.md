@@ -2,6 +2,11 @@
 
 Cinematic multicharacter selection for **Qbox** — character create / select / delete / spawn, with illenium-appearance and optional starter apartments.
 
+# Preview 
+<img width="1487" height="840" alt="image" src="https://github.com/user-attachments/assets/40fc47ad-b28e-4313-9f9e-b9a9e7847cfe" />
+<img width="1487" height="840" alt="image" src="https://github.com/user-attachments/assets/f44accbd-7289-49e8-8535-6587d68758c4" />
+
+
 ## Requirements
 
 - [ox_lib](https://github.com/overextended/ox_lib)
