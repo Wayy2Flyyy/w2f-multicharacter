@@ -399,6 +399,11 @@ Config.Highlight = {
     --- to an alpha-only highlight (full alpha = hovered/selected, dim = idle).
     --- Hover detection, selection, and NUI details all keep working.
     enabled = true,
+    --- Stock mp_m/mp_f freemode peds crash inside the outline shader on hover
+    --- for many FiveM client builds; addon/custom ped models are usually fine.
+    --- When true (default), freemode slots use alpha highlight only while
+    --- custom ped models still get the full outline when enabled = true.
+    alphaForFreemode = true,
     outlineColor = { r = 106, g = 217, b = 255 },
     selectedColor = { r = 120, g = 200, b = 255 },
     emptyHoverColor = { r = 160, g = 220, b = 255 },
@@ -427,7 +432,7 @@ Config.Hover.disableHoverSound = false
 --- Performance tuning for the character selection phase.
 ---
 --- preset:
----   high       — default; full outline shader, 120+ Hz loops, camera drift
+---   high       — default; outline on addon peds, 120+ Hz loops, camera drift
 ---   balanced   — middle ground for mid-range PCs
 ---   universal  — low-end / compatibility fallback
 ---   auto       — starts universal; adaptive governor adjusts at runtime
