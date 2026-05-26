@@ -938,14 +938,34 @@ function W2F.Characters.DeleteSelected()
 
     local citizenid = character.citizenid
     local ok, err = lib.callback.await('w2f-multicharacter:server:deleteCharacter', false, citizenid)
-    if not ok then
-        lib.notify({
-            title = 'Delete Character',
-            description = type(err) == 'string' and err or 'Failed to delete character.',
-            type = 'error',
+   if not ok then
+    local message = type(err) == 'string' and err or 'Failed to delete character.'
+
+    lib.notify({
+        title = 'Delete Character',
+        description = message,
+        type = 'error',
+    })
+
+    if W2F.Nui and W2F.Nui.Send then
+        W2F.Nui.Send('characterDeleteFailed', {
+            error = message,
         })
-        return
+    elseif W2F.SendNui then
+        W2F.SendNui('characterDeleteFailed', {
+            error = message,
+        })
+    else
+        SendNUIMessage({
+            action = 'characterDeleteFailed',
+            data = {
+                error = message,
+            },
+        })
     end
+
+    return
+end
 
     --- Wipe local caches for this character so a refresh doesn't re-spawn it.
     W2F.State.modelCache[citizenid] = nil
