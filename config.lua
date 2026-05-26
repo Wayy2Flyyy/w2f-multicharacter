@@ -1,5 +1,8 @@
 Config = {}
 
+Config.Framework = Config.Framework or 'auto'
+-- valid values: 'auto', 'qbox', 'qbcore', 'esx'
+
 Config.General = {
     Debug = false,
     --- Should match the number of scene ped slots (visual lineup positions).
@@ -575,7 +578,7 @@ Config.Spawns = {
     },
 }
 
-Config.UseQbox = true
+Config.UseQbox = (Config.Framework == "auto" or Config.Framework == "qbox")
 Config.MaxCharacters = Config.General.MaxCharacters
 
 Config.Spawn = {

@@ -11,6 +11,7 @@ shared_scripts {
     '@ox_lib/init.lua',
     'config.lua',
     'shared/state.lua',
+    'shared/framework.lua',
 }
 
 client_scripts {
@@ -32,6 +33,7 @@ client_scripts {
     'client/utils.lua',
     'client/cleanup.lua',
     'client/bootstrap.lua',
+    'client/framework.lua',
     'client/qbox.lua',
     'client/camera.lua',
     'client/characters.lua',
@@ -46,6 +48,7 @@ client_scripts {
 
 server_scripts {
     '@oxmysql/lib/MySQL.lua',
+    'server/framework.lua',
     'server/database.lua',
     'server/main.lua',
 }
@@ -61,5 +64,4 @@ files {
 dependencies {
     'ox_lib',
     'oxmysql',
-    'qbx_core',
 }
