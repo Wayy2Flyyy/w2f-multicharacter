@@ -545,54 +545,80 @@ const handlers = {
         showApp();
         setVisible(dom.hint, data?.showControlHints !== false);
     },
+
     openCreateCharacter: (data) => {
         showApp();
         openCreatePanel(data);
     },
+
     closeCreateCharacter: () => closeCreatePanel(),
+
     showCharacterDetails: (data) => {
         showApp();
         showHologram(data);
     },
+
     hideCharacterDetails: () => hideHologram(),
+
     hideSelectionHints: () => setVisible(dom.hint, false),
+
     updateHologram: (payload) => updateHologramPosition(payload),
+
     showSkySpawnOptions: (data) => {
         showApp();
         showSkySpawnOptions(data);
     },
+
     hideSkySpawnOptions: () => hideSkySpawnOptions(),
+
     updateHoveredPed: (data) => {
         document.body.dataset.hoveredSlot = data?.slot ?? '';
     },
+
     updateSelectedPed: (data) => {
         state.selectedSlot = data?.slot ?? null;
         document.body.dataset.selectedSlot = state.selectedSlot ?? '';
+
         if (state.selectedSlot === null) {
             hideHologram();
             closeConfirmDelete();
             state.selectedCharacterName = null;
         }
     },
+
     beginSpawnSequence: () => beginSpawnSequence(),
+
     resetSelectionUI: () => resetSelectionUI(),
+
     spawnFailed: (data) => spawnFailed(data),
+
     createCharacterResult: (data) => createCharacterResult(data),
+
     toast: (data) => {
         if (!data) return;
         showToast(data.level || 'info', data.message, data.durationMs);
     },
+
     characterDeleted: () => {
         state.confirmBusy = false;
         clearTimer('confirm');
         closeConfirmDelete();
+    },
+
+    characterDeleteFailed: (data) => {
+        state.confirmBusy = false;
+        clearTimer('confirm');
+        dom.confirmDeleteBtn.disabled = false;
+        showToast('error', data?.error || 'Failed to delete character.');
     },
 };
 
 window.addEventListener('message', (event) => {
     const { action, data } = event.data || {};
     const handler = handlers[action];
+
     if (!handler) return;
+
     try {
         handler(data);
     } catch (err) {
