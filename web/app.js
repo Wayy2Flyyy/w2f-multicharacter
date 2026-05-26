@@ -75,7 +75,7 @@ const state = {
 const TIMEOUTS = {
     spawn: 20000,
     create: 12000,
-    confirm: 8000,
+    confirm: 20000,
 };
 const timers = {};
 
