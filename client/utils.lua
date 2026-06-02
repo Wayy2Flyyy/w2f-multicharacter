@@ -10,6 +10,13 @@ function W2F.Debug(msg, ...)
     end
 end
 
+function W2F.IsQbxPropertiesAvailable()
+    local apt = Config.Apartments
+    if apt and apt.enabled == false then return false end
+    if not GetResourceState then return false end
+    return GetResourceState('qbx_properties') == 'started'
+end
+
 function W2F.Clamp(v, min, max)
     if v < min then return min end
     if v > max then return max end

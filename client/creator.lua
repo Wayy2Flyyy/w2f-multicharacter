@@ -358,11 +358,16 @@ function W2F.Creator.StartPipeline(formData, visualSlot)
 
     local cc = Config.CharacterCreation or {}
 
-    --- NEW (preferred): direct-to-apartment. Skip the LSIA appearance hop
-    --- and the spawn picker entirely. Player lands inside their starter
-    --- apartment with the clothing editor already opening on top.
+    --- NEW (preferred): direct-to-apartment when qbx_properties is available.
+    --- If apartments are disabled / missing, qbx_properties is optional: skip
+    --- apartment selection and continue with the normal configured spawn picker.
     if cc.directToApartment ~= false then
-        W2F.Creator.SpawnDirectlyInApartment()
+        if W2F.IsQbxPropertiesAvailable and W2F.IsQbxPropertiesAvailable() then
+            W2F.Creator.SpawnDirectlyInApartment()
+        else
+            dbg('qbx_properties unavailable; using normal spawn picker')
+            W2F.Creator.GoDirectlyToSpawn()
+        end
         return
     end
 
@@ -398,6 +403,12 @@ end
 --- Phase path: creating -> finalizing -> playing.
 -----------------------------------------------------------------------------
 function W2F.Creator.SpawnDirectlyInApartment()
+    if not (W2F.IsQbxPropertiesAvailable and W2F.IsQbxPropertiesAvailable()) then
+        dbg('SpawnDirectlyInApartment skipped; qbx_properties unavailable')
+        W2F.Creator.GoDirectlyToSpawn()
+        return
+    end
+
     local meta = W2F.State.pendingNewCharacterMeta or {}
     local citizenid = meta.citizenid or W2F.State.pendingNewCitizenid
     if not citizenid then
