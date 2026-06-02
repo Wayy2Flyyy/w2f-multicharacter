@@ -25,6 +25,27 @@ local function getPlayerLicenses(source)
     return GetPlayerIdentifierByType(source, 'license'), GetPlayerIdentifierByType(source, 'license2')
 end
 
+local function getLicenseIdentifierSet(license, license2)
+    local identifiers = {}
+    if license and license ~= '' then
+        identifiers[#identifiers + 1] = license
+    end
+    if license2 and license2 ~= '' and license2 ~= license then
+        identifiers[#identifiers + 1] = license2
+    end
+    return identifiers
+end
+
+local function buildLicenseWhere(identifiers)
+    if #identifiers == 0 then return nil end
+
+    local parts = {}
+    for i = 1, #identifiers do
+        parts[i] = 'license = ?'
+    end
+    return table.concat(parts, ' OR ')
+end
+
 local session = {}
 local SELECT_COOLDOWN_MS = 250
 local SPAWN_COOLDOWN_MS = 600
@@ -329,18 +350,14 @@ end
 --- relinks their FiveM identifier ends up with characters that don't
 --- appear in the lineup but still exist in the DB.
 local function fetchCharactersByLicense(license, license2)
-    local rows
-    if license2 and license2 ~= '' and license2 ~= license then
-        rows = MySQL.query.await(
-            'SELECT citizenid, cid, charinfo, money, job, metadata, position, gang, UNIX_TIMESTAMP(last_logged_out) AS lastLoggedOutUnix FROM players WHERE license = ? OR license = ? ORDER BY cid ASC',
-            { license, license2 }
-        )
-    else
-        rows = MySQL.query.await(
-            'SELECT citizenid, cid, charinfo, money, job, metadata, position, gang, UNIX_TIMESTAMP(last_logged_out) AS lastLoggedOutUnix FROM players WHERE license = ? ORDER BY cid ASC',
-            { license }
-        )
-    end
+    local identifiers = getLicenseIdentifierSet(license, license2)
+    local licenseWhere = buildLicenseWhere(identifiers)
+    if not licenseWhere then return {} end
+
+    local rows = MySQL.query.await(
+        ('SELECT citizenid, cid, charinfo, money, job, metadata, position, gang, UNIX_TIMESTAMP(last_logged_out) AS lastLoggedOutUnix FROM players WHERE %s ORDER BY cid ASC'):format(licenseWhere),
+        identifiers
+    )
     if not rows or #rows == 0 then
         return {}
     end
@@ -357,21 +374,30 @@ end
 local function ownsCitizenid(src, citizenid)
     if not citizenid or citizenid == '' then return false end
     local license, license2 = getPlayerLicenses(src)
-    if not license and not license2 then return false end
+    local identifiers = getLicenseIdentifierSet(license, license2)
+    local licenseWhere = buildLicenseWhere(identifiers)
+    if not licenseWhere then return false end
 
-    local row
-    if license2 and license2 ~= license then
-        row = MySQL.single.await(
-            'SELECT citizenid FROM players WHERE citizenid = ? AND (license = ? OR license = ?) LIMIT 1',
-            { citizenid, license or '', license2 }
-        )
-    else
-        row = MySQL.single.await(
-            'SELECT citizenid FROM players WHERE citizenid = ? AND license = ? LIMIT 1',
-            { citizenid, license }
-        )
+    local params = { citizenid }
+    for i = 1, #identifiers do
+        params[#params + 1] = identifiers[i]
     end
+
+    local row = MySQL.single.await(
+        ('SELECT citizenid, license FROM players WHERE citizenid = ? AND (%s) LIMIT 1'):format(licenseWhere),
+        params
+    )
     local owned = row and row.citizenid ~= nil
+
+    if Config.Debug then
+        print(('[w2f-multicharacter] ownsCitizenid src=%s citizenid=%s license=%s license2=%s rowFound=%s'):format(
+            tostring(src),
+            tostring(citizenid),
+            tostring(license),
+            tostring(license2),
+            tostring(owned)
+        ))
+    end
 
     if not owned and W2F.Database then
         W2F.Database.Log(license or license2, citizenid, 'denied_ownership', nil)
