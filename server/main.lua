@@ -11,8 +11,9 @@
 ---   * `selectedCitizenid` is cleared from `session[src]` on delete /
 ---     logout / finishCreation / cancelCreation so a stale selection can't
 ---     be used to spawn a deleted character.
----   * `fetchCharactersByLicense` queries `license OR license2` to match
----     qbx_core's identifier resolution.
+---   * `fetchCharactersByLicense` / `ownsCitizenid` compare normalized
+---     `license:` and `license2:` variants to match qbx_core identifier
+---     resolution without trusting client-provided citizenids.
 ---   * The unauthenticated `RegisterNetEvent(loadCharacter)` is removed.
 ---   * Audit log is extended: `select`, `request_spawn`, `apartment_claim_success`,
 ---     `denied_ownership`, `rate_limited`.
@@ -25,14 +26,37 @@ local function getPlayerLicenses(source)
     return GetPlayerIdentifierByType(source, 'license'), GetPlayerIdentifierByType(source, 'license2')
 end
 
+local function addLicenseIdentifier(identifiers, seen, identifier)
+    if not identifier or identifier == '' or seen[identifier] then return end
+    seen[identifier] = true
+    identifiers[#identifiers + 1] = identifier
+end
+
+local function getAlternateLicenseIdentifier(identifier)
+    if type(identifier) ~= 'string' then return nil end
+
+    local licenseValue = identifier:match('^license:(.+)$')
+    if licenseValue and licenseValue ~= '' then
+        return ('license2:%s'):format(licenseValue)
+    end
+
+    local license2Value = identifier:match('^license2:(.+)$')
+    if license2Value and license2Value ~= '' then
+        return ('license:%s'):format(license2Value)
+    end
+
+    return nil
+end
+
 local function getLicenseIdentifierSet(license, license2)
     local identifiers = {}
-    if license and license ~= '' then
-        identifiers[#identifiers + 1] = license
-    end
-    if license2 and license2 ~= '' and license2 ~= license then
-        identifiers[#identifiers + 1] = license2
-    end
+    local seen = {}
+
+    addLicenseIdentifier(identifiers, seen, license)
+    addLicenseIdentifier(identifiers, seen, getAlternateLicenseIdentifier(license))
+    addLicenseIdentifier(identifiers, seen, license2)
+    addLicenseIdentifier(identifiers, seen, getAlternateLicenseIdentifier(license2))
+
     return identifiers
 end
 
@@ -345,10 +369,9 @@ local function giveStarterItems(source)
     end)
 end
 
---- Now queries BOTH license and license2 so the lineup matches what
---- qbx_core's own character resolver sees. Without this, a player who
---- relinks their FiveM identifier ends up with characters that don't
---- appear in the lineup but still exist in the DB.
+--- Query all authenticated license identifiers, including equivalent
+--- `license:`/`license2:` variants, so the lineup matches what qbx_core may
+--- have stored in `players.license` during character creation.
 local function fetchCharactersByLicense(license, license2)
     local identifiers = getLicenseIdentifierSet(license, license2)
     local licenseWhere = buildLicenseWhere(identifiers)
@@ -369,8 +392,33 @@ local function fetchCharactersByLicense(license, license2)
     return list
 end
 
---- Ownership check now compares against BOTH license identifiers (license,
---- license2) so re-linked users don't get locked out of their own characters.
+local function getCharacterDatabaseLicense(citizenid)
+    if not citizenid or citizenid == '' then return nil end
+
+    local row = MySQL.single.await(
+        'SELECT license FROM players WHERE citizenid = ? LIMIT 1',
+        { citizenid }
+    )
+    return row and row.license or nil
+end
+
+local function waitForCharacterDatabaseLicense(citizenid)
+    local dbLicense = getCharacterDatabaseLicense(citizenid)
+    if dbLicense then return dbLicense end
+
+    for _ = 1, 5 do
+        Wait(100)
+        dbLicense = getCharacterDatabaseLicense(citizenid)
+        if dbLicense then return dbLicense end
+    end
+
+    return nil
+end
+
+--- Ownership check compares the current source's license identifiers plus the
+--- equivalent `license:`/`license2:` variants. qbx_core and FiveM can disagree
+--- about which prefix is stored on a freshly-created `players.license` row, but
+--- the identifier value still belongs to the same authenticated source.
 local function ownsCitizenid(src, citizenid)
     if not citizenid or citizenid == '' then return false end
     local license, license2 = getPlayerLicenses(src)
@@ -545,6 +593,25 @@ lib.callback.register('w2f-multicharacter:server:createCharacter', function(sour
         local citizenid = player and player.PlayerData.citizenid
         if not citizenid then
             createdOk, createdErr = false, 'Character created but data missing.'
+            return
+        end
+
+        local dbLicense = waitForCharacterDatabaseLicense(citizenid)
+        local ownsAfterCreate = ownsCitizenid(source, citizenid)
+
+        if Config.Debug then
+            print(('[w2f-multicharacter] createCharacter ownership src=%s citizenid=%s license=%s license2=%s dbLicense=%s ownsAfterCreate=%s'):format(
+                tostring(source),
+                tostring(citizenid),
+                tostring(license),
+                tostring(license2),
+                tostring(dbLicense),
+                tostring(ownsAfterCreate)
+            ))
+        end
+
+        if not ownsAfterCreate then
+            createdOk, createdErr = false, 'Character created but ownership could not be verified.'
             return
         end
 
