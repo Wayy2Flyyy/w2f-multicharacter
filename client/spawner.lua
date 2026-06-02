@@ -251,6 +251,7 @@ local function buildSpawnCardsForNui()
 
     local apt = Config.Apartments
     if not apt or apt.enabled == false then return spawns end
+    if not (W2F.IsQbxPropertiesAvailable and W2F.IsQbxPropertiesAvailable()) then return spawns end
 
     local character = W2F.State.selectedCharacter
     if not character or not character.citizenid then return spawns end
@@ -714,6 +715,12 @@ end
 -----------------------------------------------------------------------------
 function W2F.Spawner.ClaimApartment(apartmentIndex)
     if not W2F.Session.Is('sky_picker') or not W2F.State.selectedCharacter then return end
+    if not (W2F.IsQbxPropertiesAvailable and W2F.IsQbxPropertiesAvailable()) then
+        dbg('ClaimApartment skipped; qbx_properties unavailable')
+        W2F.Spawner.FlyToSpawn((Config.Spawn and Config.Spawn.lastLocationFallback) or 'public')
+        return
+    end
+
     local character = W2F.State.selectedCharacter
     if not character or not character.citizenid then return end
 
@@ -911,7 +918,12 @@ RegisterNUICallback('chooseSkySpawn', function(data, cb)
     if spawnId and spawnId ~= '' and W2F.Session.Is('sky_picker') then
         local index = type(spawnId) == 'string' and spawnId:match('^apt:(%d+)$')
         if index then
-            W2F.Spawner.ClaimApartment(tonumber(index))
+            if W2F.IsQbxPropertiesAvailable and W2F.IsQbxPropertiesAvailable() then
+                W2F.Spawner.ClaimApartment(tonumber(index))
+            else
+                dbg('apartment spawn selected while qbx_properties unavailable; falling back to public spawn')
+                W2F.Spawner.FlyToSpawn((Config.Spawn and Config.Spawn.lastLocationFallback) or 'public')
+            end
         else
             W2F.Spawner.FlyToSpawn(spawnId)
         end

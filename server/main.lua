@@ -872,8 +872,12 @@ lib.callback.register('w2f-multicharacter:server:selectCharacter', function(sour
     return true
 end)
 
+local function isQbxPropertiesStarted()
+    return GetResourceState('qbx_properties') == 'started'
+end
+
 local function loadQbxApartments()
-    if GetResourceState('qbx_properties') ~= 'started' then return nil end
+    if not isQbxPropertiesStarted() then return nil end
     local raw = LoadResourceFile('qbx_properties', 'config/shared.lua')
     if not raw then return nil end
 
@@ -926,7 +930,7 @@ lib.callback.register('w2f-multicharacter:server:canClaimApartment', function(so
     if not rateLimit(source, 'canClaimApartment') then return false, 'rate_limited' end
     if type(apartmentIndex) ~= 'number' then return false, 'Invalid apartment.' end
     if not ownsCitizenid(source, citizenid) then return false, 'You do not own that character.' end
-    if GetResourceState('qbx_properties') ~= 'started' then
+    if not isQbxPropertiesStarted() then
         return false, 'Apartments are unavailable.'
     end
     if playerOwnsProperty(citizenid) then
@@ -955,6 +959,7 @@ end)
 --- Logged by the client after qbx_properties' apartmentSelect succeeded
 --- (so the audit log reflects real claims, not just attempts).
 lib.callback.register('w2f-multicharacter:server:confirmApartmentClaimed', function(source, apartmentIndex, citizenid)
+    if not isQbxPropertiesStarted() then return false end
     if not citizenid or not ownsCitizenid(source, citizenid) then return false end
     if W2F.Database then
         local license = getPlayerLicense(source)
