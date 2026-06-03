@@ -127,13 +127,19 @@ end
 function W2F.CharacterLoad.Load(opts)
     opts = opts or {}
     local citizenid = opts.citizenid
+    local function fail(reason)
+        if W2F.Debug then
+            W2F.Debug('CharacterLoad.Load failure citizenid=%s reason=%s', tostring(citizenid), tostring(reason))
+        end
+        return false, reason
+    end
     local coords = opts.coords
     if not citizenid or not coords then
-        return false, 'missing_args'
+        return fail('missing_args')
     end
 
     if not (W2F.Qbox and W2F.Qbox.IsActive and W2F.Qbox.IsActive()) then
-        return false, 'no_qbox'
+        return fail('no_qbox')
     end
 
     local timeouts = opts.timeouts or {}
@@ -146,11 +152,11 @@ function W2F.CharacterLoad.Load(opts)
         local done, success = awaitWithTimeout('qbx_core:server:loadCharacter', t.serverLoad, citizenid)
         if not done then
             recordSpan('charload.server_load', stepStarted)
-            return false, 'server_timeout'
+            return fail('server_timeout')
         end
         if success == false then
             recordSpan('charload.server_load', stepStarted)
-            return false, 'server_denied'
+            return fail('server_denied')
         end
         recordSpan('charload.server_load', stepStarted)
     end
@@ -165,7 +171,7 @@ function W2F.CharacterLoad.Load(opts)
     end
     recordSpan('charload.playerdata', stepStarted)
     if not pd or pd.citizenid ~= citizenid then
-        return false, 'playerdata_timeout'
+        return fail('playerdata_timeout')
     end
 
     --- Step 3: fetch saved model + appearance.
@@ -182,12 +188,12 @@ function W2F.CharacterLoad.Load(opts)
         stepStarted = tnow()
         local hash = type(model) == 'string' and joaat(model) or model
         if not hash or not IsModelInCdimage(hash) then
-            return false, 'model_invalid'
+            return fail('model_invalid')
         end
         if lib and lib.requestModel then
             local ok = lib.requestModel(hash, t.model)
             if not ok then
-                return false, 'model_load_failed'
+                return fail('model_load_failed')
             end
         else
             RequestModel(hash)
@@ -196,7 +202,7 @@ function W2F.CharacterLoad.Load(opts)
                 Wait(0)
             end
             if not HasModelLoaded(hash) then
-                return false, 'model_load_failed'
+                return fail('model_load_failed')
             end
         end
 
@@ -209,7 +215,7 @@ function W2F.CharacterLoad.Load(opts)
         SetModelAsNoLongerNeeded(hash)
         recordSpan('charload.model_swap', stepStarted)
         if GetEntityModel(PlayerPedId()) ~= hash then
-            return false, 'model_swap_timeout'
+            return fail('model_swap_timeout')
         end
     end
 
@@ -220,7 +226,7 @@ function W2F.CharacterLoad.Load(opts)
     Wait(150)
     recordSpan('charload.appearance', stepStarted)
     if not appliedOk then
-        return false, appliedErr or 'appearance_failed'
+        return fail(appliedErr or 'appearance_failed')
     end
 
     --- Step 6: collision streaming at destination.

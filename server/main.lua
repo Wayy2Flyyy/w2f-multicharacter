@@ -1023,18 +1023,44 @@ lib.callback.register('w2f-multicharacter:server:canClaimApartment', function(so
     return true
 end)
 
---- Logged by the client after qbx_properties' apartmentSelect succeeded
---- (so the audit log reflects real claims, not just attempts).
+--- Logged by the client after qbx_properties' apartmentSelect event. Do not
+--- trust the event alone: wait for the property row so the audit reflects a
+--- real claim and callers can recover when qbx_properties fails or stops.
 lib.callback.register('w2f-multicharacter:server:confirmApartmentClaimed', function(source, apartmentIndex, citizenid)
-    if not isQbxPropertiesStarted() then return false end
-    if not citizenid or not ownsCitizenid(source, citizenid) then return false end
-    if W2F.Database then
-        local license = getPlayerLicense(source)
-        if license then
-            W2F.Database.Log(license, citizenid, 'apartment_claim_success', { index = apartmentIndex })
-        end
+    if not isQbxPropertiesStarted() then
+        if Config.Debug then print('[w2f-multicharacter] confirmApartmentClaimed failure: qbx_properties not started') end
+        return false
     end
-    return true
+    if not citizenid or not ownsCitizenid(source, citizenid) then
+        if Config.Debug then print(('[w2f-multicharacter] confirmApartmentClaimed failure: ownership src=%s citizenid=%s'):format(source, tostring(citizenid))) end
+        return false
+    end
+
+    local deadline = GetGameTimer() + 5000
+    while GetGameTimer() < deadline do
+        if not isQbxPropertiesStarted() then
+            if Config.Debug then print('[w2f-multicharacter] confirmApartmentClaimed failure: qbx_properties stopped while waiting') end
+            return false
+        end
+
+        local ok, row = pcall(function()
+            return MySQL.single.await('SELECT id FROM properties WHERE owner = ? LIMIT 1', { citizenid })
+        end)
+        if ok and row then
+            if W2F.Database then
+                local license = getPlayerLicense(source)
+                if license then
+                    W2F.Database.Log(license, citizenid, 'apartment_claim_success', { index = apartmentIndex })
+                end
+            end
+            if Config.Debug then print(('[w2f-multicharacter] confirmApartmentClaimed success citizenid=%s propertyId=%s'):format(tostring(citizenid), tostring(row.id))) end
+            return true
+        end
+        Wait(200)
+    end
+
+    if Config.Debug then print(('[w2f-multicharacter] confirmApartmentClaimed failure: property row timeout citizenid=%s'):format(tostring(citizenid))) end
+    return false
 end)
 
 lib.callback.register('w2f-multicharacter:server:requestSpawn', function(source, spawnId, citizenid)

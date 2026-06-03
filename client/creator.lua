@@ -7,8 +7,8 @@
 ---   * directToApartment = true (default): form -> server createCharacter
 ---     -> log in as new char -> apartment claim -> clothing editor opens
 ---     INSIDE the apartment (via qbx_properties' built-in CreateFirstCharacter
----     hook). No LSIA hop, no spawn picker. The player ends up inside their
----     starter apartment in `playing` phase with the editor on top.
+---     hook). If qbx_properties is unavailable or the claim cannot be confirmed,
+---     creation falls back to the legacy appearance editor before the spawn picker.
 ---   * directToApartment = false (legacy): form -> server createCharacter
 ---     -> appearance editor at LSIA -> spawn picker -> apartment/location.
 ---
@@ -203,13 +203,16 @@ function W2F.Creator.OpenAppearance(gender, coords, heading)
 
             if appearance then
                 TriggerServerEvent('illenium-appearance:server:saveAppearance', appearance)
+                dbg('appearance save success (illenium event dispatched)')
                 local ok = lib.callback.await('w2f-multicharacter:server:finishCreation', false)
+                dbg('finishCreation %s', ok and 'success' or 'failure')
                 if ok and (cc.directToSpawnPicker ~= false) then
                     W2F.Creator.GoDirectlyToSpawn()
                 else
                     W2F.Creator.ReturnToSelection(true)
                 end
             else
+                dbg('appearance save failure (illenium customization cancelled)')
                 lib.callback.await('w2f-multicharacter:server:cancelCreation', false)
                 W2F.Creator.ReturnToSelection(false)
             end
@@ -250,12 +253,15 @@ function W2F.Creator.OpenAppearance(gender, coords, heading)
         teardownStreaming()
 
         if cancelled then
+            dbg('appearance save failure (fallback clothing editor did not save)')
             lib.callback.await('w2f-multicharacter:server:cancelCreation', false)
             W2F.Creator.ReturnToSelection(false)
             return
         end
 
+        dbg('appearance save success (fallback clothing save observed)')
         local ok = lib.callback.await('w2f-multicharacter:server:finishCreation', false)
+        dbg('finishCreation %s', ok and 'success' or 'failure')
         if ok and (cc.directToSpawnPicker ~= false) then
             W2F.Creator.GoDirectlyToSpawn()
         else
@@ -272,6 +278,27 @@ local function startCreatorInputLock()
             Wait(0)
         end
     end)
+end
+
+local function startLegacyAppearance(result, visualSlot, reason)
+    local transOk = W2F.Session.Is('appearance')
+        or W2F.Session.Transition('appearance', reason or 'create_ok')
+    if not transOk then
+        pcall(function() lib.callback.await('w2f-multicharacter:server:cancelCreation', false) end)
+        W2F.Creator.ReturnToSelection(false)
+        return false
+    end
+
+    local cc = Config.CharacterCreation or {}
+    local coords = cc.appearanceLocation
+    if not coords then
+        local slot = Config.Scene.pedSlots[visualSlot]
+        coords = slot and Config.GetSlotCoords(slot) or Config.GetSceneFocal()
+    end
+
+    dbg('legacy appearance fallback started reason=%s', tostring(reason or 'legacy_config'))
+    W2F.Creator.OpenAppearance(result.gender or 0, coords, coords.w or 0.0)
+    return true
 end
 
 -----------------------------------------------------------------------------
@@ -336,6 +363,8 @@ function W2F.Creator.StartPipeline(formData, visualSlot)
         return
     end
 
+    dbg('createCharacter success citizenid=%s cid=%s', tostring(result.citizenid), tostring(result.cid))
+
     --- Stash the new character's id BEFORE transitioning so the spawn /
     --- apartment paths can read it.
     W2F.State.pendingNewCitizenid = result.citizenid
@@ -358,37 +387,23 @@ function W2F.Creator.StartPipeline(formData, visualSlot)
 
     local cc = Config.CharacterCreation or {}
 
-    --- NEW (preferred): direct-to-apartment when qbx_properties is available.
-    --- If apartments are disabled / missing, qbx_properties is optional: skip
-    --- apartment selection and continue with the normal configured spawn picker.
+    --- Direct-to-apartment is only safe when qbx_properties can complete the
+    --- apartment-first clothing flow. Otherwise the already logged-in new
+    --- character must save appearance and finishCreation must log them out
+    --- before the normal spawn picker is allowed to load them again.
     if cc.directToApartment ~= false then
         if W2F.IsQbxPropertiesAvailable and W2F.IsQbxPropertiesAvailable() then
             W2F.Creator.SpawnDirectlyInApartment()
         else
-            dbg('qbx_properties unavailable; using normal spawn picker')
-            W2F.Creator.GoDirectlyToSpawn()
+            dbg('qbx_properties unavailable fallback selected')
+            startLegacyAppearance(result, visualSlot, 'qbx_properties_unavailable')
         end
         return
     end
 
-    --- Legacy LSIA pipeline: transition to `appearance` and run the editor
-    --- at the configured outdoor location, then hand off to the spawn picker.
-    local transOk = W2F.Session.Transition('appearance', 'create_ok')
-    if not transOk then
-        --- Couldn't transition (unexpected) - roll back and recover.
-        pcall(function() lib.callback.await('w2f-multicharacter:server:cancelCreation', false) end)
-        W2F.Creator.ReturnToSelection(false)
-        return
-    end
-
-    local coords = cc.appearanceLocation
-    if not coords then
-        local slot = Config.Scene.pedSlots[visualSlot]
-        coords = slot and Config.GetSlotCoords(slot) or Config.GetSceneFocal()
-    end
-    local heading = coords.w or 0.0
-
-    W2F.Creator.OpenAppearance(result.gender or 0, coords, heading)
+    --- Legacy LSIA pipeline: run the editor at the configured outdoor
+    --- location, then hand off to the spawn picker after finishCreation.
+    startLegacyAppearance(result, visualSlot, 'create_ok')
 end
 
 -----------------------------------------------------------------------------
@@ -403,9 +418,11 @@ end
 --- Phase path: creating -> finalizing -> playing.
 -----------------------------------------------------------------------------
 function W2F.Creator.SpawnDirectlyInApartment()
+    dbg('SpawnDirectlyInApartment called')
     if not (W2F.IsQbxPropertiesAvailable and W2F.IsQbxPropertiesAvailable()) then
-        dbg('SpawnDirectlyInApartment skipped; qbx_properties unavailable')
-        W2F.Creator.GoDirectlyToSpawn()
+        dbg('qbx_properties unavailable fallback selected')
+        startLegacyAppearance(W2F.State.pendingNewCharacterMeta or {}, W2F.State.pendingVisualSlot,
+            'qbx_properties_unavailable')
         return
     end
 
@@ -474,8 +491,14 @@ function W2F.Creator.SpawnDirectlyInApartment()
         end
     end
     if not enterCoords then
-        abort('no_apartments_available',
-            'No starter apartments are configured. Enable qbx_properties.')
+        if W2F.Watchdog then W2F.Watchdog.Disarm('creator_apt') end
+        dbg('apartment options unavailable; falling back to legacy appearance')
+        lib.notify({
+            title = 'Apartment',
+            description = 'No starter apartment is available. Opening character appearance instead.',
+            type = 'warning',
+        })
+        startLegacyAppearance(meta, W2F.State.pendingVisualSlot, 'no_apartments_available')
         return
     end
 
@@ -514,21 +537,14 @@ function W2F.Creator.SpawnDirectlyInApartment()
     local canClaim, claimErr = lib.callback.await('w2f-multicharacter:server:canClaimApartment',
         false, apartmentIndex, citizenid)
     if not canClaim then
-        --- Player is already logged in — just fade them in at the apartment
-        --- enter coords and let qbx_core's normal flow take over instead of
-        --- forcing a full rollback.
         if W2F.Watchdog then W2F.Watchdog.Disarm('creator_apt') end
+        dbg('apartment claim precheck failed; falling back to legacy appearance reason=%s', tostring(claimErr))
         lib.notify({
             title = 'Apartment',
-            description = type(claimErr) == 'string' and claimErr or 'Apartment unavailable.',
+            description = 'Starter apartment unavailable. Opening character appearance instead.',
             type = 'warning',
         })
-        if W2F.Cleanup and W2F.Cleanup.Full then W2F.Cleanup.Full(true) end
-        W2F.Cleanup.FirePlayerLoadedEvents()
-        W2F.Cleanup.RestoreFrameworkUi(6)
-        W2F.Session.Transition('finalizing', 'apt_claim_denied')
-        W2F.Session.Transition('playing', 'apt_claim_denied')
-        if IsScreenFadedOut() then DoScreenFadeIn(800) end
+        startLegacyAppearance(meta, W2F.State.pendingVisualSlot, 'apt_claim_denied')
         return
     end
 
@@ -544,10 +560,21 @@ function W2F.Creator.SpawnDirectlyInApartment()
     --- Step 6: audit the claim (the await also gives qbx ~50-100ms to start
     --- processing apartmentSelect, so when we fade in next the teleport is
     --- usually already complete).
-    pcall(function()
-        lib.callback.await('w2f-multicharacter:server:confirmApartmentClaimed',
+    local confirmOk, claimed = pcall(function()
+        return lib.callback.await('w2f-multicharacter:server:confirmApartmentClaimed',
             false, apartmentIndex, citizenid)
     end)
+    dbg('confirmApartmentClaimed %s', confirmOk and claimed and 'success' or 'failure')
+    if not confirmOk or not claimed then
+        if W2F.Watchdog then W2F.Watchdog.Disarm('creator_apt') end
+        lib.notify({
+            title = 'Apartment',
+            description = 'Starter apartment could not be confirmed. Opening character appearance instead.',
+            type = 'warning',
+        })
+        startLegacyAppearance(meta, W2F.State.pendingVisualSlot, 'apt_claim_unconfirmed')
+        return
+    end
 
     --- Step 7: transition to `finalizing`. From `creating` this is now an
     --- allowed transition (see session.lua) for exactly this pipeline.
@@ -608,6 +635,7 @@ local function awaitSelectCharacter(citizenid)
 end
 
 function W2F.Creator.GoDirectlyToSpawn()
+    dbg('GoDirectlyToSpawn called')
     local meta = W2F.State.pendingNewCharacterMeta or {}
     local citizenid = meta.citizenid or W2F.State.pendingNewCitizenid
     if not citizenid then
