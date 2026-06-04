@@ -783,11 +783,19 @@ function W2F.Spawner.ClaimApartment(apartmentIndex)
     --- client triggers this from their own session.
     TriggerServerEvent('qbx_properties:server:apartmentSelect', apartmentIndex)
 
-    --- 5. Audit the successful claim now that we know qbx accepted it.
-    pcall(function()
-        lib.callback.await('w2f-multicharacter:server:confirmApartmentClaimed', false,
+    --- 5. Confirm qbx_properties persisted the claim before treating it as
+    --- successful. This character has already been loaded, so recover rather
+    --- than trying another normal spawn and risking a second login.
+    local confirmOk, claimed = pcall(function()
+        return lib.callback.await('w2f-multicharacter:server:confirmApartmentClaimed', false,
             apartmentIndex, character.citizenid)
     end)
+    dbg('confirmApartmentClaimed %s', confirmOk and claimed and 'success' or 'failure')
+    if not confirmOk or not claimed then
+        W2F.Watchdog.Disarm('finalize')
+        W2F.Spawner.RecoverFromFailedSpawn('Starter apartment claim could not be confirmed.')
+        return
+    end
 
     --- 6. Fire framework "player loaded" events so HUD / radial / banking
     --- init. Without this they never appear because qbx skipped them.
