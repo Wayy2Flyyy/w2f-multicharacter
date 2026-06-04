@@ -648,7 +648,8 @@ lib.callback.register('w2f-multicharacter:server:createCharacter', function(sour
         end
 
         local player = exports.qbx_core:GetPlayer(source)
-        local citizenid = player and player.PlayerData.citizenid
+        local playerData = player and player.PlayerData
+        local citizenid = playerData and playerData.citizenid
         if not citizenid then
             createdOk, createdErr = false, 'Character created but data missing.'
             return
@@ -656,19 +657,28 @@ lib.callback.register('w2f-multicharacter:server:createCharacter', function(sour
 
         local dbLicense = waitForCharacterDatabaseLicense(citizenid, 5000)
         local ownsAfterCreate = ownsCitizenid(source, citizenid)
+        local qboxOwnsAfterCreate = playerData and playerData.citizenid == citizenid
 
         if Config.Debug then
-            print(('[w2f-multicharacter] createCharacter ownership src=%s citizenid=%s license=%s license2=%s dbLicense=%s ownsAfterCreate=%s'):format(
+            print(('[w2f-multicharacter] createCharacter ownership src=%s citizenid=%s license=%s license2=%s dbLicense=%s ownsAfterCreate=%s qboxOwnsAfterCreate=%s playerLicense=%s playerCitizenid=%s'):format(
                 tostring(source),
                 tostring(citizenid),
                 tostring(license),
                 tostring(license2),
                 tostring(dbLicense),
-                tostring(ownsAfterCreate)
+                tostring(ownsAfterCreate),
+                tostring(qboxOwnsAfterCreate),
+                tostring(playerData and playerData.license or nil),
+                tostring(playerData and playerData.citizenid or nil)
             ))
         end
 
-        if not ownsAfterCreate then
+        --- Immediately after qbx_core:Login(source, nil, { charinfo = result }),
+        --- qbx_core is the server-side authority that this source is logged in
+        --- as the newly-created character. Keep ownsCitizenid for all normal
+        --- paths, but allow this narrow post-create fallback so delayed or
+        --- differently-formatted players.license rows don't reject valid creates.
+        if not ownsAfterCreate and not qboxOwnsAfterCreate then
             createdOk, createdErr = false, 'Character created but ownership could not be verified.'
             return
         end
