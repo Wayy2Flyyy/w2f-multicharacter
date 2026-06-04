@@ -45,12 +45,16 @@ Config.CharacterCreation = {
     directToSpawnPicker = true,
     --- NEW FLOW (preferred): right after the create form is submitted, log
     --- the player in as the new character and drop them DIRECTLY into the
-    --- starter apartment. qbx_properties' apartmentSelect handler then
-    --- triggers `qb-clothes:client:CreateFirstCharacter` so the clothing
-    --- editor opens INSIDE the apartment — no spawn picker, no LSIA hop.
+    --- starter apartment. This requires qbx_properties to complete its
+    --- apartment-first flow and trigger `qb-clothes:client:CreateFirstCharacter`
+    --- so appearance is created inside the apartment.
     ---
-    --- Set false to fall back to the legacy LSIA-appearance-then-spawn-picker
-    --- pipeline (which still works for servers that don't use qbx_properties).
+    --- If qbx_properties is unavailable or its claim cannot be confirmed, the
+    --- resource falls back to legacy appearance creation before opening the
+    --- spawn picker. directToApartment must never skip appearance creation
+    --- unless the apartment flow is confirmed available.
+    ---
+    --- Set false to always use the legacy appearance-then-spawn-picker pipeline.
     directToApartment = true,
     --- Which qbx_properties apartment index to use as the starter when
     --- `directToApartment` is true. See `qbx_properties/config/shared.lua`
