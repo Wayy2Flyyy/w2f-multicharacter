@@ -761,42 +761,19 @@ end)
 
 local function resolveAppearanceModel(appearance, playerData)
     local model = type(appearance) == 'table' and appearance.model or nil
-    if type(model) == 'table' then
-        if type(model.model) == 'string' and model.model ~= '' then
-            return model.model
-        end
-        if model.hash then
-            return tostring(model.hash)
-        end
-    elseif type(model) == 'number' then
-        return tostring(model)
-    elseif type(model) == 'string' and model ~= '' then
-        return model
-    end
+    if model and model ~= '' then return tostring(model) end
 
     local charinfo = playerData and playerData.charinfo or {}
     local gender = tonumber(charinfo.gender) or tonumber(charinfo.sex) or 0
     return gender == 1 and 'mp_f_freemode_01' or 'mp_m_freemode_01'
 end
 
-local function verifyActivePlayerskin(citizenid, timeoutMs)
-    local verifyDeadline = GetGameTimer() + (timeoutMs or 5000)
-    repeat
-        local verifyRow = MySQL.single.await(
-            'SELECT skin FROM playerskins WHERE citizenid = ? AND active = 1 ORDER BY id DESC LIMIT 1',
-            { citizenid }
-        )
-        if verifyRow and verifyRow.skin and verifyRow.skin ~= '' then
-            return true, verifyRow
-        end
-        Wait(100)
-    until GetGameTimer() >= verifyDeadline
-    return false, nil
-end
-
 lib.callback.register('w2f-multicharacter:server:saveNewCharacterAppearance', function(source, appearance)
     if not rateLimit(source, 'saveNewAppearance') then
         return false, 'rate_limited'
+    end
+    if type(appearance) ~= 'table' then
+        return false, 'invalid_appearance'
     end
     if not (Config.UseQbox and GetResourceState('qbx_core') == 'started') then
         return false, 'qbox_unavailable'
@@ -806,29 +783,7 @@ lib.callback.register('w2f-multicharacter:server:saveNewCharacterAppearance', fu
     local playerData = player and player.PlayerData
     local citizenid = playerData and playerData.citizenid
     if not citizenid or citizenid == '' then
-        return false, 'missing_player'
-    end
-
-    local verifyOnly = appearance == nil
-    if not verifyOnly and type(appearance) ~= 'table' then
-        return false, 'invalid_appearance'
-    end
-
-    if Config.Debug then
-        print(('[w2f-multicharacter] saveNewCharacterAppearance called src=%s citizenid=%s verifyOnly=%s'):format(
-            tostring(source), tostring(citizenid), tostring(verifyOnly)))
-    end
-
-    if verifyOnly then
-        local verified = verifyActivePlayerskin(citizenid, 5000)
-        if Config.Debug then
-            print(('[w2f-multicharacter] saveNewCharacterAppearance verifyOnly citizenid=%s verified=%s'):format(
-                tostring(citizenid), tostring(verified)))
-        end
-        if not verified then
-            return false, 'verify_failed'
-        end
-        return true
+        return false, 'not_logged_in'
     end
 
     local model = resolveAppearanceModel(appearance, playerData)
@@ -838,7 +793,7 @@ lib.callback.register('w2f-multicharacter:server:saveNewCharacterAppearance', fu
     end
 
     if Config.Debug then
-        print(('[w2f-multicharacter] saveNewCharacterAppearance saving src=%s citizenid=%s model=%s'):format(
+        print(('[w2f-multicharacter] saveNewCharacterAppearance called src=%s citizenid=%s model=%s'):format(
             tostring(source), tostring(citizenid), tostring(model)))
     end
 
@@ -853,43 +808,41 @@ lib.callback.register('w2f-multicharacter:server:saveNewCharacterAppearance', fu
         return false, 'deactivate_failed'
     end
 
-    local saved = false
-    local upsertOk, upsertResult = pcall(function()
+    local insertOk, inserted = pcall(function()
         return MySQL.insert.await(
-            'INSERT INTO playerskins (citizenid, model, skin, active) VALUES (?, ?, ?, 1) ON DUPLICATE KEY UPDATE model = VALUES(model), skin = VALUES(skin), active = 1',
+            'INSERT INTO playerskins (citizenid, model, skin, active) VALUES (?, ?, ?, 1)',
             { citizenid, model, encoded }
         )
     end)
-    if upsertOk and upsertResult then
-        saved = true
-    else
-        local insertOk, inserted = pcall(function()
-            return MySQL.insert.await(
-                'INSERT INTO playerskins (citizenid, model, skin, active) VALUES (?, ?, ?, 1)',
-                { citizenid, model, encoded }
-            )
-        end)
-        if insertOk and inserted then
-            saved = true
-            upsertResult = inserted
-        elseif Config.Debug then
-            print(('[w2f-multicharacter] saveNewCharacterAppearance insert failed citizenid=%s upsertErr=%s insertErr=%s'):format(
-                tostring(citizenid), tostring(upsertResult), tostring(inserted)))
+    if not insertOk or not inserted then
+        if Config.Debug then
+            print(('[w2f-multicharacter] saveNewCharacterAppearance insert failed citizenid=%s err=%s'):format(
+                tostring(citizenid), tostring(inserted)))
         end
-    end
-
-    if not saved then
         return false, 'insert_failed'
     end
 
-    local verified = verifyActivePlayerskin(citizenid, 5000)
+    local verified = false
+    local verifyDeadline = GetGameTimer() + 5000
+    local verifyRow = nil
+    repeat
+        verifyRow = MySQL.single.await(
+            'SELECT skin FROM playerskins WHERE citizenid = ? AND active = 1 ORDER BY id DESC LIMIT 1',
+            { citizenid }
+        )
+        if verifyRow and verifyRow.skin and verifyRow.skin ~= '' then
+            verified = true
+            break
+        end
+        Wait(100)
+    until GetGameTimer() >= verifyDeadline
 
     if Config.Debug then
-        print(('[w2f-multicharacter] saveNewCharacterAppearance result citizenid=%s model=%s deactivated=%s saved=%s verified=%s'):format(
+        print(('[w2f-multicharacter] saveNewCharacterAppearance result citizenid=%s model=%s deactivated=%s inserted=%s verified=%s'):format(
             tostring(citizenid),
             tostring(model),
             tostring(deactivated),
-            tostring(upsertResult),
+            tostring(inserted),
             tostring(verified)
         ))
     end
