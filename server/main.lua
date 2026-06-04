@@ -649,7 +649,8 @@ lib.callback.register('w2f-multicharacter:server:createCharacter', function(sour
 
         local player = exports.qbx_core:GetPlayer(source)
         local playerData = player and player.PlayerData
-        local citizenid = playerData and playerData.citizenid
+        local qboxCitizenid = playerData and playerData.citizenid
+        local citizenid = qboxCitizenid
         if not citizenid then
             createdOk, createdErr = false, 'Character created but data missing.'
             return
@@ -657,10 +658,33 @@ lib.callback.register('w2f-multicharacter:server:createCharacter', function(sour
 
         local dbLicense = waitForCharacterDatabaseLicense(citizenid, 5000)
         local ownsAfterCreate = ownsCitizenid(source, citizenid)
-        local qboxOwnsAfterCreate = playerData and playerData.citizenid == citizenid
+        local qboxOwnsAfterCreate = player ~= nil
+            and playerData ~= nil
+            and qboxCitizenid == citizenid
+        local repairedLicense = false
+
+        if qboxOwnsAfterCreate and (not dbLicense or dbLicense == '') then
+            local repairLicense = license or license2
+            if repairLicense and repairLicense ~= '' then
+                local repairOk, affected = pcall(function()
+                    return MySQL.update.await(
+                        'UPDATE players SET license = ? WHERE citizenid = ? AND (license IS NULL OR license = "")',
+                        { repairLicense, citizenid }
+                    )
+                end)
+                repairedLicense = repairOk and (tonumber(affected) or 0) > 0
+                if repairedLicense then
+                    dbLicense = repairLicense
+                    ownsAfterCreate = ownsCitizenid(source, citizenid)
+                elseif Config.Debug and not repairOk then
+                    print(('[w2f-multicharacter] createCharacter license repair failed src=%s citizenid=%s err=%s'):format(
+                        tostring(source), tostring(citizenid), tostring(affected)))
+                end
+            end
+        end
 
         if Config.Debug then
-            print(('[w2f-multicharacter] createCharacter ownership src=%s citizenid=%s license=%s license2=%s dbLicense=%s ownsAfterCreate=%s qboxOwnsAfterCreate=%s playerLicense=%s playerCitizenid=%s'):format(
+            print(('[w2f-multicharacter] createCharacter ownership src=%s citizenid=%s license=%s license2=%s dbLicense=%s ownsAfterCreate=%s qboxOwnsAfterCreate=%s qboxCitizenid=%s repairedLicense=%s playerLicense=%s'):format(
                 tostring(source),
                 tostring(citizenid),
                 tostring(license),
@@ -668,8 +692,9 @@ lib.callback.register('w2f-multicharacter:server:createCharacter', function(sour
                 tostring(dbLicense),
                 tostring(ownsAfterCreate),
                 tostring(qboxOwnsAfterCreate),
-                tostring(playerData and playerData.license or nil),
-                tostring(playerData and playerData.citizenid or nil)
+                tostring(qboxCitizenid),
+                tostring(repairedLicense),
+                tostring(playerData and playerData.license or nil)
             ))
         end
 
