@@ -26,36 +26,70 @@ local function getPlayerLicenses(source)
     return GetPlayerIdentifierByType(source, 'license'), GetPlayerIdentifierByType(source, 'license2')
 end
 
-local function addLicenseIdentifier(identifiers, seen, identifier)
-    if not identifier or identifier == '' or seen[identifier] then return end
-    seen[identifier] = true
-    identifiers[#identifiers + 1] = identifier
+local function trimString(value)
+    if type(value) ~= 'string' then return nil end
+    return value:gsub('^%s+', ''):gsub('%s+$', '')
 end
 
-local function getAlternateLicenseIdentifier(identifier)
-    if type(identifier) ~= 'string' then return nil end
+local function normalizeLicenseIdentifier(identifier)
+    local value = trimString(identifier)
+    if not value or value == '' then return nil end
 
-    local licenseValue = identifier:match('^license:(.+)$')
-    if licenseValue and licenseValue ~= '' then
-        return ('license2:%s'):format(licenseValue)
-    end
+    value = value:lower()
+    value = value:gsub('^license2:', '')
+    value = value:gsub('^license:', '')
+    if value == '' then return nil end
+    return value
+end
 
-    local license2Value = identifier:match('^license2:(.+)$')
-    if license2Value and license2Value ~= '' then
-        return ('license:%s'):format(license2Value)
-    end
+local function addLicenseIdentifier(identifiers, seen, identifier)
+    local value = trimString(identifier)
+    if not value or value == '' or seen[value] then return end
+    seen[value] = true
+    identifiers[#identifiers + 1] = value
+end
 
-    return nil
+local function addLicenseIdentifierVariants(identifiers, seen, identifier)
+    addLicenseIdentifier(identifiers, seen, identifier)
+
+    local normalized = normalizeLicenseIdentifier(identifier)
+    if not normalized then return end
+
+    --- qbx_core deployments differ on whether `players.license` stores
+    --- `license:hex`, `license2:hex`, or the raw hex. Keep exact SQL fast-path
+    --- variants broad, then let ownsCitizenid's normalized fallback be the
+    --- authoritative format-tolerant check.
+    addLicenseIdentifier(identifiers, seen, normalized)
+    addLicenseIdentifier(identifiers, seen, ('license:%s'):format(normalized))
+    addLicenseIdentifier(identifiers, seen, ('license2:%s'):format(normalized))
 end
 
 local function getLicenseIdentifierSet(license, license2)
     local identifiers = {}
     local seen = {}
 
-    addLicenseIdentifier(identifiers, seen, license)
-    addLicenseIdentifier(identifiers, seen, getAlternateLicenseIdentifier(license))
-    addLicenseIdentifier(identifiers, seen, license2)
-    addLicenseIdentifier(identifiers, seen, getAlternateLicenseIdentifier(license2))
+    addLicenseIdentifierVariants(identifiers, seen, license)
+    addLicenseIdentifierVariants(identifiers, seen, license2)
+
+    return identifiers
+end
+
+local function getNormalizedLicenseIdentifierSet(license, license2)
+    local identifiers = {}
+    local seen = {}
+
+    local function add(identifier)
+        local normalized = normalizeLicenseIdentifier(identifier)
+        if not normalized or seen[normalized] then return end
+        seen[normalized] = true
+        identifiers[#identifiers + 1] = normalized
+    end
+
+    add(license)
+    add(license2)
+    for _, identifier in ipairs(getLicenseIdentifierSet(license, license2)) do
+        add(identifier)
+    end
 
     return identifiers
 end
@@ -85,6 +119,7 @@ local RATE_LIMITS = {
     deleteCharacter    = 1500,
     cancelCreation     = 1500,
     finishCreation     = 1500,
+    saveNewAppearance  = 1500,
     getCharacters      = 250,
     getSlotSummary     = 250,
     getAppearance      = 150,
@@ -402,23 +437,23 @@ local function getCharacterDatabaseLicense(citizenid)
     return row and row.license or nil
 end
 
-local function waitForCharacterDatabaseLicense(citizenid)
-    local dbLicense = getCharacterDatabaseLicense(citizenid)
-    if dbLicense then return dbLicense end
-
-    for _ = 1, 5 do
+local function waitForCharacterDatabaseLicense(citizenid, timeoutMs)
+    local deadline = GetGameTimer() + (timeoutMs or 5000)
+    repeat
+        local dbLicense = getCharacterDatabaseLicense(citizenid)
+        if dbLicense and dbLicense ~= '' then return dbLicense end
         Wait(100)
-        dbLicense = getCharacterDatabaseLicense(citizenid)
-        if dbLicense then return dbLicense end
-    end
+    until GetGameTimer() >= deadline
 
+    local dbLicense = getCharacterDatabaseLicense(citizenid)
+    if dbLicense and dbLicense ~= '' then return dbLicense end
     return nil
 end
 
---- Ownership check compares the current source's license identifiers plus the
---- equivalent `license:`/`license2:` variants. qbx_core and FiveM can disagree
---- about which prefix is stored on a freshly-created `players.license` row, but
---- the identifier value still belongs to the same authenticated source.
+--- Ownership check compares the current source's license identifiers plus their
+--- raw / `license:` / `license2:` variants. The exact SQL path stays fast, then
+--- a citizenid-only fallback verifies normalized identifier values so differing
+--- prefix formats don't reject the rightful owner.
 local function ownsCitizenid(src, citizenid)
     if not citizenid or citizenid == '' then return false end
     local license, license2 = getPlayerLicenses(src)
@@ -431,19 +466,43 @@ local function ownsCitizenid(src, citizenid)
         params[#params + 1] = identifiers[i]
     end
 
-    local row = MySQL.single.await(
+    local exactRow = MySQL.single.await(
         ('SELECT citizenid, license FROM players WHERE citizenid = ? AND (%s) LIMIT 1'):format(licenseWhere),
         params
     )
-    local owned = row and row.citizenid ~= nil
+    local exactMatch = exactRow and exactRow.citizenid ~= nil
+    local dbRow = exactRow
+    local normalizedMatch = false
+
+    if not exactMatch then
+        dbRow = MySQL.single.await(
+            'SELECT citizenid, license FROM players WHERE citizenid = ? LIMIT 1',
+            { citizenid }
+        )
+
+        if dbRow and dbRow.license then
+            local dbLicense = normalizeLicenseIdentifier(dbRow.license)
+            local normalizedIdentifiers = getNormalizedLicenseIdentifierSet(license, license2)
+            for i = 1, #normalizedIdentifiers do
+                if dbLicense and dbLicense == normalizedIdentifiers[i] then
+                    normalizedMatch = true
+                    break
+                end
+            end
+        end
+    end
+
+    local owned = exactMatch or normalizedMatch
 
     if Config.Debug then
-        print(('[w2f-multicharacter] ownsCitizenid src=%s citizenid=%s license=%s license2=%s rowFound=%s'):format(
+        print(('[w2f-multicharacter] ownsCitizenid src=%s citizenid=%s license=%s license2=%s dbLicense=%s exactMatch=%s normalisedMatch=%s'):format(
             tostring(src),
             tostring(citizenid),
             tostring(license),
             tostring(license2),
-            tostring(owned)
+            tostring(dbRow and dbRow.license or nil),
+            tostring(exactMatch),
+            tostring(normalizedMatch)
         ))
     end
 
@@ -590,27 +649,62 @@ lib.callback.register('w2f-multicharacter:server:createCharacter', function(sour
         end
 
         local player = exports.qbx_core:GetPlayer(source)
-        local citizenid = player and player.PlayerData.citizenid
+        local playerData = player and player.PlayerData
+        local qboxCitizenid = playerData and playerData.citizenid
+        local citizenid = qboxCitizenid
         if not citizenid then
             createdOk, createdErr = false, 'Character created but data missing.'
             return
         end
 
-        local dbLicense = waitForCharacterDatabaseLicense(citizenid)
+        local dbLicense = waitForCharacterDatabaseLicense(citizenid, 5000)
         local ownsAfterCreate = ownsCitizenid(source, citizenid)
+        local qboxOwnsAfterCreate = player ~= nil
+            and playerData ~= nil
+            and qboxCitizenid == citizenid
+        local repairedLicense = false
+
+        if qboxOwnsAfterCreate and (not dbLicense or dbLicense == '') then
+            local repairLicense = license or license2
+            if repairLicense and repairLicense ~= '' then
+                local repairOk, affected = pcall(function()
+                    return MySQL.update.await(
+                        'UPDATE players SET license = ? WHERE citizenid = ? AND (license IS NULL OR license = "")',
+                        { repairLicense, citizenid }
+                    )
+                end)
+                repairedLicense = repairOk and (tonumber(affected) or 0) > 0
+                if repairedLicense then
+                    dbLicense = repairLicense
+                    ownsAfterCreate = ownsCitizenid(source, citizenid)
+                elseif Config.Debug and not repairOk then
+                    print(('[w2f-multicharacter] createCharacter license repair failed src=%s citizenid=%s err=%s'):format(
+                        tostring(source), tostring(citizenid), tostring(affected)))
+                end
+            end
+        end
 
         if Config.Debug then
-            print(('[w2f-multicharacter] createCharacter ownership src=%s citizenid=%s license=%s license2=%s dbLicense=%s ownsAfterCreate=%s'):format(
+            print(('[w2f-multicharacter] createCharacter ownership src=%s citizenid=%s license=%s license2=%s dbLicense=%s ownsAfterCreate=%s qboxOwnsAfterCreate=%s qboxCitizenid=%s repairedLicense=%s playerLicense=%s'):format(
                 tostring(source),
                 tostring(citizenid),
                 tostring(license),
                 tostring(license2),
                 tostring(dbLicense),
-                tostring(ownsAfterCreate)
+                tostring(ownsAfterCreate),
+                tostring(qboxOwnsAfterCreate),
+                tostring(qboxCitizenid),
+                tostring(repairedLicense),
+                tostring(playerData and playerData.license or nil)
             ))
         end
 
-        if not ownsAfterCreate then
+        --- Immediately after qbx_core:Login(source, nil, { charinfo = result }),
+        --- qbx_core is the server-side authority that this source is logged in
+        --- as the newly-created character. Keep ownsCitizenid for all normal
+        --- paths, but allow this narrow post-create fallback so delayed or
+        --- differently-formatted players.license rows don't reject valid creates.
+        if not ownsAfterCreate and not qboxOwnsAfterCreate then
             createdOk, createdErr = false, 'Character created but ownership could not be verified.'
             return
         end
@@ -661,6 +755,100 @@ lib.callback.register('w2f-multicharacter:server:finishCreation', function(sourc
 
     if W2F.Database and license then
         W2F.Database.Log(license, citizenid, 'finish_appearance', nil)
+    end
+    return true
+end)
+
+local function resolveAppearanceModel(appearance, playerData)
+    local model = type(appearance) == 'table' and appearance.model or nil
+    if model and model ~= '' then return tostring(model) end
+
+    local charinfo = playerData and playerData.charinfo or {}
+    local gender = tonumber(charinfo.gender) or tonumber(charinfo.sex) or 0
+    return gender == 1 and 'mp_f_freemode_01' or 'mp_m_freemode_01'
+end
+
+lib.callback.register('w2f-multicharacter:server:saveNewCharacterAppearance', function(source, appearance)
+    if not rateLimit(source, 'saveNewAppearance') then
+        return false, 'rate_limited'
+    end
+    if type(appearance) ~= 'table' then
+        return false, 'invalid_appearance'
+    end
+    if not (Config.UseQbox and GetResourceState('qbx_core') == 'started') then
+        return false, 'qbox_unavailable'
+    end
+
+    local player = exports.qbx_core:GetPlayer(source)
+    local playerData = player and player.PlayerData
+    local citizenid = playerData and playerData.citizenid
+    if not citizenid or citizenid == '' then
+        return false, 'not_logged_in'
+    end
+
+    local model = resolveAppearanceModel(appearance, playerData)
+    local encodedOk, encoded = pcall(json.encode, appearance)
+    if not encodedOk or type(encoded) ~= 'string' or encoded == '' then
+        return false, 'encode_failed'
+    end
+
+    if Config.Debug then
+        print(('[w2f-multicharacter] saveNewCharacterAppearance called src=%s citizenid=%s model=%s'):format(
+            tostring(source), tostring(citizenid), tostring(model)))
+    end
+
+    local deactivateOk, deactivated = pcall(function()
+        return MySQL.update.await('UPDATE playerskins SET active = 0 WHERE citizenid = ?', { citizenid })
+    end)
+    if not deactivateOk then
+        if Config.Debug then
+            print(('[w2f-multicharacter] saveNewCharacterAppearance deactivate failed citizenid=%s err=%s'):format(
+                tostring(citizenid), tostring(deactivated)))
+        end
+        return false, 'deactivate_failed'
+    end
+
+    local insertOk, inserted = pcall(function()
+        return MySQL.insert.await(
+            'INSERT INTO playerskins (citizenid, model, skin, active) VALUES (?, ?, ?, 1)',
+            { citizenid, model, encoded }
+        )
+    end)
+    if not insertOk or not inserted then
+        if Config.Debug then
+            print(('[w2f-multicharacter] saveNewCharacterAppearance insert failed citizenid=%s err=%s'):format(
+                tostring(citizenid), tostring(inserted)))
+        end
+        return false, 'insert_failed'
+    end
+
+    local verified = false
+    local verifyDeadline = GetGameTimer() + 5000
+    local verifyRow = nil
+    repeat
+        verifyRow = MySQL.single.await(
+            'SELECT skin FROM playerskins WHERE citizenid = ? AND active = 1 ORDER BY id DESC LIMIT 1',
+            { citizenid }
+        )
+        if verifyRow and verifyRow.skin and verifyRow.skin ~= '' then
+            verified = true
+            break
+        end
+        Wait(100)
+    until GetGameTimer() >= verifyDeadline
+
+    if Config.Debug then
+        print(('[w2f-multicharacter] saveNewCharacterAppearance result citizenid=%s model=%s deactivated=%s inserted=%s verified=%s'):format(
+            tostring(citizenid),
+            tostring(model),
+            tostring(deactivated),
+            tostring(inserted),
+            tostring(verified)
+        ))
+    end
+
+    if not verified then
+        return false, 'verify_failed'
     end
     return true
 end)
@@ -1023,18 +1211,44 @@ lib.callback.register('w2f-multicharacter:server:canClaimApartment', function(so
     return true
 end)
 
---- Logged by the client after qbx_properties' apartmentSelect succeeded
---- (so the audit log reflects real claims, not just attempts).
+--- Logged by the client after qbx_properties' apartmentSelect event. Do not
+--- trust the event alone: wait for the property row so the audit reflects a
+--- real claim and callers can recover when qbx_properties fails or stops.
 lib.callback.register('w2f-multicharacter:server:confirmApartmentClaimed', function(source, apartmentIndex, citizenid)
-    if not isQbxPropertiesStarted() then return false end
-    if not citizenid or not ownsCitizenid(source, citizenid) then return false end
-    if W2F.Database then
-        local license = getPlayerLicense(source)
-        if license then
-            W2F.Database.Log(license, citizenid, 'apartment_claim_success', { index = apartmentIndex })
-        end
+    if not isQbxPropertiesStarted() then
+        if Config.Debug then print('[w2f-multicharacter] confirmApartmentClaimed failure: qbx_properties not started') end
+        return false
     end
-    return true
+    if not citizenid or not ownsCitizenid(source, citizenid) then
+        if Config.Debug then print(('[w2f-multicharacter] confirmApartmentClaimed failure: ownership src=%s citizenid=%s'):format(source, tostring(citizenid))) end
+        return false
+    end
+
+    local deadline = GetGameTimer() + 5000
+    while GetGameTimer() < deadline do
+        if not isQbxPropertiesStarted() then
+            if Config.Debug then print('[w2f-multicharacter] confirmApartmentClaimed failure: qbx_properties stopped while waiting') end
+            return false
+        end
+
+        local ok, row = pcall(function()
+            return MySQL.single.await('SELECT id FROM properties WHERE owner = ? LIMIT 1', { citizenid })
+        end)
+        if ok and row then
+            if W2F.Database then
+                local license = getPlayerLicense(source)
+                if license then
+                    W2F.Database.Log(license, citizenid, 'apartment_claim_success', { index = apartmentIndex })
+                end
+            end
+            if Config.Debug then print(('[w2f-multicharacter] confirmApartmentClaimed success citizenid=%s propertyId=%s'):format(tostring(citizenid), tostring(row.id))) end
+            return true
+        end
+        Wait(200)
+    end
+
+    if Config.Debug then print(('[w2f-multicharacter] confirmApartmentClaimed failure: property row timeout citizenid=%s'):format(tostring(citizenid))) end
+    return false
 end)
 
 lib.callback.register('w2f-multicharacter:server:requestSpawn', function(source, spawnId, citizenid)

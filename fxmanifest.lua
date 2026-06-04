@@ -61,6 +61,10 @@ files {
     'web/style.css',
 }
 
+-- Runtime integration notes:
+--   qbx_core is required when Config.UseQbox is enabled.
+--   illenium-appearance is preferred for character customization.
+--   qbx_properties is optional; without it, creation uses the legacy appearance flow.
 dependencies {
     'ox_lib',
     'oxmysql',
