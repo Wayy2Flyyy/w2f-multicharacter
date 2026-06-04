@@ -445,18 +445,18 @@ function openCreatePanel(data) {
     }, 50);
 }
 
-function closeCreatePanel(restoreHints)
-    state.createOpen = false
-    state.createSlot = null
-    state.createBusy = false
-    clearTimer('create')
-    document.body.classList.remove('create-mode')
+function closeCreatePanel() {
+    state.createOpen = false;
+    state.createSlot = null;
+    state.createBusy = false;
+    clearTimer('create');
+    document.body.classList.remove('create-mode');
     if (dom.createPanel) {
         dom.createPanel.classList.remove('fade-in');
         setVisible(dom.createPanel, false);
     }
     showCreateError('');
-    if (restoreHints !== false && state.selectionActive && !state.skyMode) setVisible(dom.hint, true);
+    if (state.selectionActive && !state.skyMode) setVisible(dom.hint, true);
     if (state.lastFocus && document.contains(state.lastFocus)) {
         try {
             state.lastFocus.focus();
@@ -551,7 +551,7 @@ const handlers = {
         openCreatePanel(data);
     },
 
-    closeCreateCharacter: () => closeCreatePanel(false),
+    closeCreateCharacter: () => closeCreatePanel(),
 
     showCharacterDetails: (data) => {
         showApp();
@@ -589,18 +589,6 @@ const handlers = {
     beginSpawnSequence: () => beginSpawnSequence(),
 
     resetSelectionUI: () => resetSelectionUI(),
-
-    setVisible: (data) => {
-        if (data && data.visible === false) {
-            hideApp();
-            return;
-        }
-        if (data && data.visible === true) {
-            showApp();
-        }
-    },
-
-    hide: () => hideApp(),
 
     spawnFailed: (data) => spawnFailed(data),
 
