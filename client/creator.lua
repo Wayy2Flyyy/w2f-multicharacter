@@ -48,6 +48,51 @@ local function getCreationConfig()
     }
 end
 
+function W2F.Creator.HideMulticharUiForAppearance()
+    W2F.SendNui('closeCreateCharacter', {})
+    W2F.SendNui('hideCharacterDetails', {})
+    W2F.SendNui('hideSkySpawnOptions', {})
+    W2F.SendNui('hideSelectionHints', {})
+    W2F.SendNui('resetSelectionUI', {})
+    W2F.SetSelectionFocus(false, false)
+    SetNuiFocus(false, false)
+    if SetNuiFocusKeepInput then SetNuiFocusKeepInput(false) end
+end
+
+local function saveAppearanceThenFinish(appearance, cc)
+    W2F.Creator.HideMulticharUiForAppearance()
+
+    local savedOk, saveErr = lib.callback.await(
+        'w2f-multicharacter:server:saveNewCharacterAppearance',
+        false,
+        appearance
+    )
+    dbg('appearance save %s reason=%s', savedOk and 'success' or 'failure', tostring(saveErr))
+
+    if not savedOk then
+        lib.notify({
+            title = 'Character Appearance',
+            description = type(saveErr) == 'string' and saveErr or 'Could not save your appearance. Please try again.',
+            type = 'error',
+        })
+        W2F.Creator.HideMulticharUiForAppearance()
+        pcall(function() lib.callback.await('w2f-multicharacter:server:cancelCreation', false) end)
+        W2F.Creator.ReturnToSelection(false)
+        return false
+    end
+
+    W2F.Creator.HideMulticharUiForAppearance()
+    local ok = lib.callback.await('w2f-multicharacter:server:finishCreation', false)
+    dbg('finishCreation %s', ok and 'success' or 'failure')
+    if ok and (cc.directToSpawnPicker ~= false) then
+        W2F.Creator.HideMulticharUiForAppearance()
+        W2F.Creator.GoDirectlyToSpawn()
+    else
+        W2F.Creator.ReturnToSelection(ok == true)
+    end
+    return ok == true
+end
+
 function W2F.Creator.OpenRegistration(visualSlot)
     if not Config.CharacterCreation or Config.CharacterCreation.enabled == false then
         return
@@ -138,6 +183,7 @@ end
 --- ReturnToSelection.
 -----------------------------------------------------------------------------
 function W2F.Creator.OpenAppearance(gender, coords, heading)
+    W2F.Creator.HideMulticharUiForAppearance()
     local cc = Config.CharacterCreation or {}
     local radius = cc.appearanceStreamRadius or 75.0
 
@@ -163,6 +209,7 @@ function W2F.Creator.OpenAppearance(gender, coords, heading)
             type = 'error',
         })
         --- Roll back the partial server-side character then return to selection.
+        W2F.Creator.HideMulticharUiForAppearance()
         pcall(function() lib.callback.await('w2f-multicharacter:server:cancelCreation', false) end)
         W2F.Creator.ReturnToSelection(false)
         return
@@ -202,17 +249,10 @@ function W2F.Creator.OpenAppearance(gender, coords, heading)
             teardownStreaming()
 
             if appearance then
-                TriggerServerEvent('illenium-appearance:server:saveAppearance', appearance)
-                dbg('appearance save success (illenium event dispatched)')
-                local ok = lib.callback.await('w2f-multicharacter:server:finishCreation', false)
-                dbg('finishCreation %s', ok and 'success' or 'failure')
-                if ok and (cc.directToSpawnPicker ~= false) then
-                    W2F.Creator.GoDirectlyToSpawn()
-                else
-                    W2F.Creator.ReturnToSelection(true)
-                end
+                saveAppearanceThenFinish(appearance, cc)
             else
                 dbg('appearance save failure (illenium customization cancelled)')
+                W2F.Creator.HideMulticharUiForAppearance()
                 lib.callback.await('w2f-multicharacter:server:cancelCreation', false)
                 W2F.Creator.ReturnToSelection(false)
             end
@@ -224,9 +264,11 @@ function W2F.Creator.OpenAppearance(gender, coords, heading)
     --- for IsNuiFocused (the old fallback waited 5 minutes for the editor
     --- to close, which produced ghost sessions if the player Alt-F4'd).
     local saved = false
+    local savedAppearance = nil
     local cancelled = false
-    local function onSave(_appearance)
+    local function onSave(appearance)
         saved = true
+        if type(appearance) == 'table' then savedAppearance = appearance end
     end
     AddEventHandler('qb-clothing:client:loadPlayerClothing', onSave)
     AddEventHandler('illenium-appearance:client:appearanceSaved', onSave)
@@ -254,15 +296,26 @@ function W2F.Creator.OpenAppearance(gender, coords, heading)
 
         if cancelled then
             dbg('appearance save failure (fallback clothing editor did not save)')
+            W2F.Creator.HideMulticharUiForAppearance()
             lib.callback.await('w2f-multicharacter:server:cancelCreation', false)
             W2F.Creator.ReturnToSelection(false)
             return
         end
 
-        dbg('appearance save success (fallback clothing save observed)')
+        if savedAppearance then
+            saveAppearanceThenFinish(savedAppearance, cc)
+            return
+        end
+
+        --- Some qb-clothes builds persist server-side before emitting their save
+        --- event and do not pass the appearance payload back to this resource.
+        --- Keep that legacy path, but make the UI/focus handoff deterministic.
+        dbg('appearance save success (fallback clothing save observed without payload)')
+        W2F.Creator.HideMulticharUiForAppearance()
         local ok = lib.callback.await('w2f-multicharacter:server:finishCreation', false)
         dbg('finishCreation %s', ok and 'success' or 'failure')
         if ok and (cc.directToSpawnPicker ~= false) then
+            W2F.Creator.HideMulticharUiForAppearance()
             W2F.Creator.GoDirectlyToSpawn()
         else
             W2F.Creator.ReturnToSelection(ok == true)
@@ -297,6 +350,7 @@ local function startLegacyAppearance(result, visualSlot, reason)
     end
 
     dbg('legacy appearance fallback started reason=%s', tostring(reason or 'legacy_config'))
+    W2F.Creator.HideMulticharUiForAppearance()
     W2F.Creator.OpenAppearance(result.gender or 0, coords, coords.w or 0.0)
     return true
 end
@@ -636,6 +690,7 @@ end
 
 function W2F.Creator.GoDirectlyToSpawn()
     dbg('GoDirectlyToSpawn called')
+    W2F.Creator.HideMulticharUiForAppearance()
     local meta = W2F.State.pendingNewCharacterMeta or {}
     local citizenid = meta.citizenid or W2F.State.pendingNewCitizenid
     if not citizenid then
@@ -713,6 +768,7 @@ function W2F.Creator.GoDirectlyToSpawn()
 end
 
 function W2F.Creator.ReturnToSelection(keepNewCharacter)
+    W2F.Creator.HideMulticharUiForAppearance()
     --- Hold suppression until EnterSelection completes (so a logout-driven
     --- re-open doesn't race the manual one we're about to do).
     W2F.Creator.suppressAutoOpen = true

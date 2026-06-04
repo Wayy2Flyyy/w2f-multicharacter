@@ -119,6 +119,7 @@ local RATE_LIMITS = {
     deleteCharacter    = 1500,
     cancelCreation     = 1500,
     finishCreation     = 1500,
+    saveNewAppearance  = 1500,
     getCharacters      = 250,
     getSlotSummary     = 250,
     getAppearance      = 150,
@@ -754,6 +755,100 @@ lib.callback.register('w2f-multicharacter:server:finishCreation', function(sourc
 
     if W2F.Database and license then
         W2F.Database.Log(license, citizenid, 'finish_appearance', nil)
+    end
+    return true
+end)
+
+local function resolveAppearanceModel(appearance, playerData)
+    local model = type(appearance) == 'table' and appearance.model or nil
+    if model and model ~= '' then return tostring(model) end
+
+    local charinfo = playerData and playerData.charinfo or {}
+    local gender = tonumber(charinfo.gender) or tonumber(charinfo.sex) or 0
+    return gender == 1 and 'mp_f_freemode_01' or 'mp_m_freemode_01'
+end
+
+lib.callback.register('w2f-multicharacter:server:saveNewCharacterAppearance', function(source, appearance)
+    if not rateLimit(source, 'saveNewAppearance') then
+        return false, 'rate_limited'
+    end
+    if type(appearance) ~= 'table' then
+        return false, 'invalid_appearance'
+    end
+    if not (Config.UseQbox and GetResourceState('qbx_core') == 'started') then
+        return false, 'qbox_unavailable'
+    end
+
+    local player = exports.qbx_core:GetPlayer(source)
+    local playerData = player and player.PlayerData
+    local citizenid = playerData and playerData.citizenid
+    if not citizenid or citizenid == '' then
+        return false, 'not_logged_in'
+    end
+
+    local model = resolveAppearanceModel(appearance, playerData)
+    local encodedOk, encoded = pcall(json.encode, appearance)
+    if not encodedOk or type(encoded) ~= 'string' or encoded == '' then
+        return false, 'encode_failed'
+    end
+
+    if Config.Debug then
+        print(('[w2f-multicharacter] saveNewCharacterAppearance called src=%s citizenid=%s model=%s'):format(
+            tostring(source), tostring(citizenid), tostring(model)))
+    end
+
+    local deactivateOk, deactivated = pcall(function()
+        return MySQL.update.await('UPDATE playerskins SET active = 0 WHERE citizenid = ?', { citizenid })
+    end)
+    if not deactivateOk then
+        if Config.Debug then
+            print(('[w2f-multicharacter] saveNewCharacterAppearance deactivate failed citizenid=%s err=%s'):format(
+                tostring(citizenid), tostring(deactivated)))
+        end
+        return false, 'deactivate_failed'
+    end
+
+    local insertOk, inserted = pcall(function()
+        return MySQL.insert.await(
+            'INSERT INTO playerskins (citizenid, model, skin, active) VALUES (?, ?, ?, 1)',
+            { citizenid, model, encoded }
+        )
+    end)
+    if not insertOk or not inserted then
+        if Config.Debug then
+            print(('[w2f-multicharacter] saveNewCharacterAppearance insert failed citizenid=%s err=%s'):format(
+                tostring(citizenid), tostring(inserted)))
+        end
+        return false, 'insert_failed'
+    end
+
+    local verified = false
+    local verifyDeadline = GetGameTimer() + 5000
+    local verifyRow = nil
+    repeat
+        verifyRow = MySQL.single.await(
+            'SELECT skin FROM playerskins WHERE citizenid = ? AND active = 1 ORDER BY id DESC LIMIT 1',
+            { citizenid }
+        )
+        if verifyRow and verifyRow.skin and verifyRow.skin ~= '' then
+            verified = true
+            break
+        end
+        Wait(100)
+    until GetGameTimer() >= verifyDeadline
+
+    if Config.Debug then
+        print(('[w2f-multicharacter] saveNewCharacterAppearance result citizenid=%s model=%s deactivated=%s inserted=%s verified=%s'):format(
+            tostring(citizenid),
+            tostring(model),
+            tostring(deactivated),
+            tostring(inserted),
+            tostring(verified)
+        ))
+    end
+
+    if not verified then
+        return false, 'verify_failed'
     end
     return true
 end)
