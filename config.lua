@@ -158,42 +158,17 @@ Config.Startup = {
 -- When `emote` is set, the slot's heading is honored verbatim (auto-facing is
 -- skipped for that slot) so the staged pose is preserved.
 Config.Scene = {
-    --- ===================================================================
-    --- DEFAULT = dependency-free VANILLA exterior lineup (LSIA south apron).
-    --- These coords exist on EVERY GTA V server with no custom MLO/IPL, so
-    --- the selector renders correctly out of the box. The old cinematic
-    --- custom-MLO lineup is preserved (commented) just below.
-    ---
-    --- To use a CUSTOM MLO lineup instead:
-    ---   1. Replace `pedSlots` + `overviewCamera` with your interior coords.
-    ---   2. In `interior` below set `forceExterior = false` and
-    ---      `forceMloScene = true`, and add any required map IPL names to
-    ---      `interior.ipls`.
-    ---   3. Make sure the MLO/map resource STARTS BEFORE w2f-multicharacter.
-    --- If a custom MLO is configured but not actually present on the server
-    --- the scene renders as broken/empty geometry — that is why the safe
-    --- default is the exterior scene.
-    --- ===================================================================
+    --- All slots share the same interior as overviewCamera so the locked
+    --- camera can frame them. Per-slot heading is honored verbatim.
     pedSlots = {
-        vec4(-1042.50, -2745.40, 21.36, 320.0),
-        vec4(-1044.30, -2746.90, 21.36, 320.0),
-        vec4(-1046.10, -2748.40, 21.36, 320.0),
+        { coords = vec4(916.7150, 40.9866, 111.7013, 63.8547), emote = 'sitchair4' },
+        { coords = vec4(914.9835, 39.3125, 111.7013, 337.9402), emote = 'smoke' },
+        { coords = vec4(912.2994, 40.3135, 111.7012, 295.9295), emote = 'leanbar' },
     },
     --- Fixed overview camera position (x, y, z). vec4.w is optional legacy
     --- metadata only — rotation is computed from this position toward the
     --- ped-lineup focal point so the camera always faces the characters.
-    overviewCamera = vec4(-1043.30, -2740.40, 23.20, 145.0),
-
-    --- ORIGINAL custom-MLO lineup (was the shipped default; needs a custom
-    --- interior at ~(916, 40, 111) installed + started, plus the interior
-    --- flags noted above). Uncomment and swap in to use it:
-    ---   pedSlots = {
-    ---       { coords = vec4(916.7150, 40.9866, 111.7013, 63.8547), emote = 'sitchair4' },
-    ---       { coords = vec4(914.9835, 39.3125, 111.7013, 337.9402), emote = 'smoke' },
-    ---       { coords = vec4(912.2994, 40.3135, 111.7012, 295.9295), emote = 'leanbar' },
-    ---   },
-    ---   overviewCamera = vec4(916.2162, 47.8691, 111.6620, 175.3658),
-
+    overviewCamera = vec4(916.2162, 47.8691, 111.6620, 175.3658),
     introDurationMs = 2800,
     introStartHeight = 12.0,
     --- When true, first session connect skips the intro fly-in and snaps
@@ -201,34 +176,50 @@ Config.Scene = {
     skipIntroOnBoot = true,
     --- Focal point is the ped-center lifted by this amount (chest/face height).
     focalHeightOffset = 1.0,
-    --- Auto-orient preview peds toward the overview camera. On for the
-    --- exterior default (the plain slots have no staged prop emotes whose
-    --- headings must be preserved).
-    autoFacePedsToCamera = true,
+    --- Auto-orient preview peds toward the overview camera. Off here because
+    --- the staged emotes look correct only at the headings provided.
+    autoFacePedsToCamera = false,
     --- Emote pool for the most recently played character (highest lastLoggedOut).
-    --- Empty for the exterior default: prop-based emotes (chairs/bars) would
-    --- float without the MLO. Re-enable when using a custom interior lineup.
-    lastLocationEmotes = {},
-    --- Interior/MLO streaming for the lineup location.
+    --- One entry is picked deterministically per citizenid when the lineup loads.
+    lastLocationEmotes = {
+        'smoke',
+        'wait', 'wait2', 'wait3', 'wait4', 'wait5', 'wait6', 'wait7',
+        'stretch', 'stretch2', 'stretch3', 'stretch4',
+        'shakeoff',
+    },
+    --- Interior/MLO streaming for the lineup location. Auto-detects via
+    --- GetInteriorAtCoords at the scene focal; fill `ipls` if your map uses IPLs.
+    ---
+    --- The lineup sits in the BASE-GAME Diamond Casino & Resort (penthouse
+    --- level, ~916/40/111). The casino is DLC geometry that is NOT streamed
+    --- unless its IPLs are requested — with no IPLs the interior renders as
+    --- broken/missing geometry (z-fighting, holes). These RequestIpl names
+    --- load the full casino shell + penthouse so it renders correctly.
+    --- (Coordinates are unchanged; this only loads the geometry that was
+    --- always supposed to be there.)
     interior = {
-        ipls = {},
+        ipls = {
+            'vw_casino_main',       -- main casino building shell
+            'vw_casino_penthouse',  -- penthouse level (lineup is here)
+            'vw_casino_carpark',    -- car park substructure
+            'vw_casino_garage',     -- penthouse garage
+            'hei_dlc_casino_aircon',
+            'vw_dlc_casino_door',
+            'hei_dlc_windows_casino',
+        },
         pinInterior = true,
-        --- DEFAULT exterior scene: force the exterior streaming path so the
-        --- resource NEVER tries to pin a (non-existent) interior, which is
-        --- what produced broken/corrupted geometry on servers without the
-        --- custom MLO. Set `forceExterior = false` + `forceMloScene = true`
-        --- when using a real custom MLO lineup.
-        forceExterior = true,
-        forceMloScene = false,
-        --- 90m exterior streaming radius (Startup.sceneStreamRadius default).
-        streamRadius = 90.0,
+        --- Ymap MLOs at the lineup coords may not register with GetInteriorAtCoords
+        --- until after the scene sphere loads — force the interior streaming path.
+        forceMloScene = true,
+        --- Safemode uses 40m; 90m can fail to load tight MLO lineups on cold boot.
+        streamRadius = 40.0,
         streamKeepaliveMs = 100,
         streamFocusRefreshMs = 500,
         --- Keep NewLoadSceneStartSphere active for the whole selection session.
         keepSceneSphere = true,
-        --- Exterior scene: hide the local ped underground (an MLO lineup would
-        --- instead set this true to keep the ped inside the interior shell).
-        keepPlayerInside = false,
+        --- Hide the local ped at focal Z instead of 50m underground (required
+        --- for the engine to keep streaming the interior shell).
+        keepPlayerInside = true,
     },
 }
 
