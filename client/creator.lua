@@ -466,27 +466,6 @@ function W2F.Creator.StartPipeline(formData, visualSlot)
 
     startCreatorInputLock()
 
-<<<<<<< HEAD
-    local cc = Config.CharacterCreation or {}
-
-    --- Direct-to-apartment is only safe when qbx_properties can complete the
-    --- apartment-first clothing flow. Otherwise the already logged-in new
-    --- character must save appearance and finishCreation must log them out
-    --- before the normal spawn picker is allowed to load them again.
-    if cc.directToApartment ~= false then
-        if W2F.IsQbxPropertiesAvailable and W2F.IsQbxPropertiesAvailable() then
-            W2F.Creator.SpawnDirectlyInApartment()
-        else
-            dbg('qbx_properties unavailable fallback selected')
-            startLegacyAppearance(result, visualSlot, 'qbx_properties_unavailable')
-        end
-        return
-    end
-
-    --- Legacy LSIA pipeline: run the editor at the configured outdoor
-    --- location, then hand off to the spawn picker after finishCreation.
-    startLegacyAppearance(result, visualSlot, 'create_ok')
-=======
     --- NEW (preferred): direct-to-apartment. Skip the LSIA appearance hop
     --- and the spawn picker entirely. Player lands inside their starter
     --- apartment with the clothing editor already opening on top.
@@ -536,7 +515,6 @@ function W2F.Creator.RunAppearancePipeline(gender, visualSlot, reason)
 
     W2F.Creator.OpenAppearance(gender or 0, coords, heading)
     return true
->>>>>>> 7767671 (Update w2f multicharacter)
 end
 
 -----------------------------------------------------------------------------
@@ -624,16 +602,6 @@ function W2F.Creator.SpawnDirectlyInApartment()
         end
     end
     if not enterCoords then
-<<<<<<< HEAD
-        if W2F.Watchdog then W2F.Watchdog.Disarm('creator_apt') end
-        dbg('apartment options unavailable; falling back to legacy appearance')
-        lib.notify({
-            title = 'Apartment',
-            description = 'No starter apartment is available. Opening character appearance instead.',
-            type = 'warning',
-        })
-        startLegacyAppearance(meta, W2F.State.pendingVisualSlot, 'no_apartments_available')
-=======
         --- Apartment resource is started but exposes no usable apartment
         --- (misconfigured index, empty apartmentOptions, properties table
         --- missing, ...). Rather than rolling back the freshly-created
@@ -641,9 +609,13 @@ function W2F.Creator.SpawnDirectlyInApartment()
         --- spawn-picker flow so creation still completes.
         dbg('SpawnDirectlyInApartment: no apartments available, falling back to appearance flow')
         if W2F.Watchdog then W2F.Watchdog.Disarm('creator_apt') end
+        lib.notify({
+            title = 'Apartment',
+            description = 'No starter apartment is available. Opening character appearance instead.',
+            type = 'warning',
+        })
         W2F.Creator.RunAppearancePipeline(meta.gender or 0,
             W2F.State.pendingVisualSlot, 'apt_unavailable_fallback')
->>>>>>> 7767671 (Update w2f multicharacter)
         return
     end
 

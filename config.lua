@@ -49,23 +49,19 @@ Config.CharacterCreation = {
     --- apartment-first flow and trigger `qb-clothes:client:CreateFirstCharacter`
     --- so appearance is created inside the apartment.
     ---
-<<<<<<< HEAD
-    --- If qbx_properties is unavailable or its claim cannot be confirmed, the
-    --- resource falls back to legacy appearance creation before opening the
-    --- spawn picker. directToApartment must never skip appearance creation
-    --- unless the apartment flow is confirmed available.
-    ---
-    --- Set false to always use the legacy appearance-then-spawn-picker pipeline.
-=======
     --- This flow is OPTIONAL and self-disabling: it only runs when the
     --- apartment resource named by `apartmentResource` (below) is actually
     --- started. On servers without an apartment system, creation automatically
     --- falls back to the legacy appearance-editor-then-spawn-picker pipeline,
     --- so the resource works completely standalone with no apartments at all.
     ---
+    --- If qbx_properties is unavailable or its claim cannot be confirmed, the
+    --- resource falls back to legacy appearance creation before opening the
+    --- spawn picker. directToApartment must never skip appearance creation
+    --- unless the apartment flow is confirmed available.
+    ---
     --- Set false to always use the legacy LSIA-appearance-then-spawn-picker
     --- pipeline even when an apartment resource is present.
->>>>>>> 7767671 (Update w2f multicharacter)
     directToApartment = true,
     --- Name of the apartment/property resource that provides the starter
     --- apartment flow. Only `qbx_properties` is integrated out of the box.
