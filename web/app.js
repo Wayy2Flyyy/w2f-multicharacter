@@ -445,12 +445,12 @@ function openCreatePanel(data) {
     }, 50);
 }
 
-function closeCreatePanel(restoreHints)
-    state.createOpen = false
-    state.createSlot = null
-    state.createBusy = false
-    clearTimer('create')
-    document.body.classList.remove('create-mode')
+function closeCreatePanel(restoreHints) {
+    state.createOpen = false;
+    state.createSlot = null;
+    state.createBusy = false;
+    clearTimer('create');
+    document.body.classList.remove('create-mode');
     if (dom.createPanel) {
         dom.createPanel.classList.remove('fade-in');
         setVisible(dom.createPanel, false);
