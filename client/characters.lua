@@ -1165,24 +1165,28 @@ function W2F.Characters.SelectSlot(slot, entry)
     W2F.MarkPedClick()
 
     local citizenid = entry.character.citizenid
-    local accepted = lib.callback.await('w2f-multicharacter:server:selectCharacter', false, citizenid)
-    if not accepted then
-        W2F.PlayFrontendSound('ERROR')
-        return
-    end
+    local payload = W2F.Characters.GetDetailsPayload(entry.character)
 
+    --- Optimistic client feedback — don't wait on the server round-trip.
     W2F.PlayW2FSound(Config.Audio.select)
     W2F.SetSelected(slot, entry.ped, entry.character)
     applySceneLighting(getProfileForCharacter(entry.character))
     W2F.Camera.FocusOnPed(entry.ped)
     W2F.Characters.RefreshHighlights()
-
-    local payload = W2F.Characters.GetDetailsPayload(entry.character)
     if W2F.Hud and W2F.Hud.Show then
         W2F.Hud.Show(payload)
     end
-    W2F.PlayW2FSound(Config.Audio.detailsOpen)
+    W2F.SendNui('showCharacterDetails', payload)
     W2F.SendNui('updateSelectedPed', { slot = slot })
+
+    local accepted = lib.callback.await('w2f-multicharacter:server:selectCharacter', false, citizenid)
+    if not accepted then
+        W2F.PlayFrontendSound('ERROR')
+        W2F.Characters.ClearSelection()
+        return
+    end
+
+    W2F.PlayW2FSound(Config.Audio.detailsOpen)
 end
 
 function W2F.Characters.ClearSelection()
@@ -1193,5 +1197,6 @@ function W2F.Characters.ClearSelection()
     if W2F.Hud and W2F.Hud.Hide then
         W2F.Hud.Hide()
     end
+    W2F.SendNui('hideCharacterDetails')
     W2F.SendNui('updateSelectedPed', { slot = nil })
 end

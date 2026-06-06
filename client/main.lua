@@ -177,12 +177,17 @@ function W2F.EnterSelection(reason)
     if W2F.Spawner and W2F.Spawner.IsSpawnCooldownActive and W2F.Spawner.IsSpawnCooldownActive() then
         print('[w2f-multicharacter][enter] blocked by spawn cooldown')
         W2F.Debug('EnterSelection blocked by spawn cooldown')
+        -- Must clear the in-flight guard on every early exit, otherwise the
+        -- next EnterSelection is permanently "re-entry blocked" (stuck on a
+        -- black screen until resource restart).
+        W2F.EnterSelectionInFlight = false
         return false
     end
 
     if W2F.Bootstrap and not W2F.Bootstrap.WaitForReady() then
         print('[w2f-multicharacter][enter] aborted: dependencies not ready')
         W2F.Debug('EnterSelection aborted: dependencies not ready')
+        W2F.EnterSelectionInFlight = false
         return false
     end
 
@@ -431,8 +436,10 @@ local function startLoadingScreenWatchdog()
         if IsScreenFadedOut() then DoScreenFadeIn(500) end
 
         --- Last-resort retry. If even this fails we surface an error toast.
-        local opened = pcall(W2F.EnterSelection, 'watchdog_retry')
-        if not opened then
+        --- `pcall` returns (didNotThrow, returnValue); we must check both so a
+        --- clean `return false` from EnterSelection still surfaces the toast.
+        local ok, opened = pcall(W2F.EnterSelection, 'watchdog_retry')
+        if not ok or not opened then
             lib.notify({
                 title = 'Character Select',
                 description = 'Could not load the lineup. Try /w2fmc_reloadscene.',

@@ -57,9 +57,11 @@ Config.UseExternalCharacters = true
 Config.AutoOpen = true
 ```
 
-**Starter apartment flow (default):** leave `Config.CharacterCreation.directToApartment = true` and ensure `qbx_properties` is running. Set `starterApartmentIndex` to match an entry in `qbx_properties/config/shared.lua` (`apartmentOptions`).
+**Apartments are fully optional.** The starter-apartment flow auto-detects whether an apartment system is running and degrades gracefully when one is not — no config change is required to run with or without apartments.
 
-**No apartments:** set `directToApartment = false` and use the spawn-picker flow instead.
+**Starter apartment flow (when available):** leave `Config.CharacterCreation.directToApartment = true` and ensure the apartment resource named by `Config.CharacterCreation.apartmentResource` (default `qbx_properties`) is running. Set `starterApartmentIndex` to match an entry in that resource's `config/shared.lua` (`apartmentOptions`). New characters are dropped directly into their starter apartment with the clothing editor opening inside.
+
+**No apartments (standalone):** if the `apartmentResource` is not started (or you set `directToApartment = false`, or `apartmentResource = ''`), creation automatically uses the appearance-editor → spawn-picker flow. The spawn picker shows only the default `Config.Spawns` locations (no apartment cards), and no `properties` table is required.
 
 ### 5. Update server.cfg
 

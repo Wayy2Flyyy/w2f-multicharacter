@@ -49,16 +49,33 @@ Config.CharacterCreation = {
     --- apartment-first flow and trigger `qb-clothes:client:CreateFirstCharacter`
     --- so appearance is created inside the apartment.
     ---
+<<<<<<< HEAD
     --- If qbx_properties is unavailable or its claim cannot be confirmed, the
     --- resource falls back to legacy appearance creation before opening the
     --- spawn picker. directToApartment must never skip appearance creation
     --- unless the apartment flow is confirmed available.
     ---
     --- Set false to always use the legacy appearance-then-spawn-picker pipeline.
+=======
+    --- This flow is OPTIONAL and self-disabling: it only runs when the
+    --- apartment resource named by `apartmentResource` (below) is actually
+    --- started. On servers without an apartment system, creation automatically
+    --- falls back to the legacy appearance-editor-then-spawn-picker pipeline,
+    --- so the resource works completely standalone with no apartments at all.
+    ---
+    --- Set false to always use the legacy LSIA-appearance-then-spawn-picker
+    --- pipeline even when an apartment resource is present.
+>>>>>>> 7767671 (Update w2f multicharacter)
     directToApartment = true,
-    --- Which qbx_properties apartment index to use as the starter when
-    --- `directToApartment` is true. See `qbx_properties/config/shared.lua`
-    --- (`apartmentOptions`) — 1 = Del Perro Heights Apt by default.
+    --- Name of the apartment/property resource that provides the starter
+    --- apartment flow. Only `qbx_properties` is integrated out of the box.
+    --- Set to '' (empty string) or false to force the no-apartment flow
+    --- regardless of which resources are running.
+    apartmentResource = 'qbx_properties',
+    --- Which apartment index to use as the starter when `directToApartment`
+    --- is true AND `apartmentResource` is running. See that resource's
+    --- `config/shared.lua` (`apartmentOptions`) — 1 = Del Perro Heights by
+    --- default in qbx_properties.
     starterApartmentIndex = 1,
 }
 
@@ -373,7 +390,7 @@ Config.Camera = {
     focus = {
         distance = 5.5,
         height = 1.4,
-        fov = 35.0,
+        fov = 33.0,
     },
     sky = {
         height = 420.0,
@@ -386,12 +403,22 @@ Config.Camera = {
         rotationOffset = 15.0,
     },
     smoothing = 0.055,
+    --- Look-at glide speed when the focal target moves (lower = silkier pan).
+    focalSmoothing = 0.038,
+    rotSmoothing = 0.048,
     idleDrift = true,
     idleDriftStrength = 0.018,
     resetSpeed = 0.04,
+    --- Slower smoothing while a character is selected — makes switching
+    --- between lineup peds feel like a gentle re-frame instead of a snap.
+    selection = {
+        focalSmoothing = 0.028,
+        rotSmoothing = 0.034,
+        fovSmoothing = 0.030,
+    },
     fov = {
         overview = 42.0,
-        focus = 35.0,
+        focus = 33.0,
         sky = 50.0,
         descent = 48.0,
         ground = 42.0,
@@ -490,7 +517,7 @@ Config.Rendering = {
 }
 
 Config.Interaction = {
-    clickDebounceMs = 150,
+    clickDebounceMs = 70,
     --- Max ray length used when picking a ped (meters) — fallback only.
     rayMaxDistance = 120.0,
     --- Tube radius around a ped used to register hover/click (meters).
@@ -519,7 +546,7 @@ Config.Interaction = {
 
 Config.UI = {
     hologramEnabled = true,
-    animationSpeed = 0.35,
+    animationSpeed = 0.52,
     detailsPosition = 'right',
     showControlHints = true,
 }
@@ -606,9 +633,12 @@ Config.Audio = {
     finalSpawn = 'final_spawn',
 }
 
---- New-character apartment integration. When enabled and `qbx_properties`
---- is running, brand-new characters get a "Starter Apartment" panel after
---- finishing creation, alongside the usual spawn points.
+--- New-character apartment integration for the SPAWN PICKER. When enabled and
+--- the apartment resource (`CharacterCreation.apartmentResource`) is running,
+--- brand-new characters get a "Starter Apartment" panel after finishing
+--- creation, alongside the usual spawn points. When that resource is not
+--- running the picker silently shows only the default spawn locations, so this
+--- can be left enabled even on servers without any apartment system.
 Config.Apartments = {
     enabled = true,
     --- Show the picker on the very first spawn of a new character only.

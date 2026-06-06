@@ -589,6 +589,13 @@ end)
 ---   3. SQL UNIQUE INDEX `(license, cid)` is the last line of defence; the
 ---      second INSERT errors out cleanly and the player sees "slot taken".
 -----------------------------------------------------------------------------
+--- Process-local set of licenses with an in-flight character creation. The
+--- FXServer runs this resource in a single Lua state, so this reliably blocks
+--- concurrent same-license creates regardless of `GET_LOCK`'s per-connection
+--- flakiness under oxmysql connection pooling. The DB advisory lock + UNIQUE
+--- INDEX remain as secondary/last-line protection.
+local creatingLicenses = {}
+
 local function withLicenseLock(license, timeoutSec, fn)
     timeoutSec = timeoutSec or 5
     local lockName = ('w2fmc_%s'):format(license)
@@ -631,8 +638,13 @@ lib.callback.register('w2f-multicharacter:server:createCharacter', function(sour
     end
 
     local primaryLicense = license or license2
+    if creatingLicenses[primaryLicense] then
+        return false, 'Character creation already in progress, please wait.'
+    end
+    creatingLicenses[primaryLicense] = true
+
     local createdOk, createdErr, createdMeta
-    withLicenseLock(primaryLicense, 5, function(_locked)
+    local runOk, runErr = pcall(withLicenseLock, primaryLicense, 5, function(_locked)
         local characters = fetchCharactersByLicense(license, license2)
         local maxSlots = getMaxCharacterSlots()
         local cid = findNextAvailableCid(characters, maxSlots)
@@ -732,6 +744,12 @@ lib.callback.register('w2f-multicharacter:server:createCharacter', function(sour
         }
     end)
 
+    creatingLicenses[primaryLicense] = nil
+
+    if not runOk then
+        if W2F.Debug then W2F.Debug('createCharacter error: %s', tostring(runErr)) end
+        return false, 'Character creation failed.'
+    end
     if createdOk then return true, createdMeta end
     return false, createdErr or 'Character creation failed.'
 end)
@@ -1193,6 +1211,10 @@ end
 
 local function playerOwnsProperty(citizenid)
     if not citizenid or citizenid == '' then return false end
+    --- On servers without an apartment/property system the `properties` table
+    --- may not exist; querying it would throw inside the callback. Guard so
+    --- the no-apartment configuration degrades cleanly to "owns nothing".
+    if not tableExists('properties') then return false end
     local row = MySQL.single.await(
         'SELECT id FROM properties WHERE owner = ? LIMIT 1',
         { citizenid }

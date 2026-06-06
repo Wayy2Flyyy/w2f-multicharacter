@@ -318,8 +318,20 @@ function W2F.Camera.UpdateOrbitMode()
         local legacy = cc.smoothing or c.smoothing or 0.10
         rateOrbit = legacy * 12.0
     end
-    local rateFocal = cc.focalSmoothingRate or (W2F.Camera.focalSmoothing or 0.10) * 12.0
-    local rateRot = cc.rotSmoothingRate or (W2F.Camera.rotSmoothing or 0.08) * 12.0
+
+    local baseFocal = cc.focalSmoothing or W2F.Camera.focalSmoothing or 0.045
+    local baseRot = cc.rotSmoothing or W2F.Camera.rotSmoothing or 0.06
+    local baseFov = cc.smoothing or c.smoothing or 0.055
+    local sel = cc.selection or {}
+    local hasSelection = W2F.State.selectedPed and DoesEntityExist(W2F.State.selectedPed)
+
+    local focalFactor = hasSelection and (sel.focalSmoothing or baseFocal) or baseFocal
+    local rotFactor = hasSelection and (sel.rotSmoothing or baseRot) or baseRot
+    local fovFactor = hasSelection and (sel.fovSmoothing or baseFov) or baseFov
+
+    local rateFocal = cc.focalSmoothingRate or focalFactor * 12.0
+    local rateRot = cc.rotSmoothingRate or rotFactor * 12.0
+    local rateFov = cc.fovSmoothingRate or fovFactor * 12.0
 
     if W2F.Camera.mode == 'overview' and not W2F.State.isDraggingCamera then
         W2F.Camera.Settle()
@@ -331,7 +343,7 @@ function W2F.Camera.UpdateOrbitMode()
         W2F.Camera.currentYaw = W2F.Frame.SmoothYaw(W2F.Camera.currentYaw, W2F.Camera.targetYaw, rateOrbit, dt)
         W2F.Camera.currentPitch = W2F.Frame.Smooth(W2F.Camera.currentPitch, W2F.Camera.targetPitch, rateOrbit, dt)
         W2F.Camera.currentDistance = W2F.Frame.Smooth(W2F.Camera.currentDistance, W2F.Camera.targetDistance, rateOrbit, dt)
-        W2F.Camera.currentFov = W2F.Frame.Smooth(W2F.Camera.currentFov, W2F.Camera.targetFov, rateOrbit, dt)
+        W2F.Camera.currentFov = W2F.Frame.Smooth(W2F.Camera.currentFov, W2F.Camera.targetFov, rateFov, dt)
     else
         --- Pre-services fallback — same behaviour as the legacy build.
         local smoothLegacy = cc.smoothing or c.smoothing

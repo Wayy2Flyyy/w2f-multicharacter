@@ -526,7 +526,7 @@ body:not(.create-mode)[data-hovered-slot]:not([data-hovered-slot=""]) {
 }
 
 .hologram.appear .holo-stage {
-    animation: holoIn 0.45s cubic-bezier(0.2, 0.8, 0.2, 1.05);
+    animation: holoIn 0.32s cubic-bezier(0.2, 0.8, 0.2, 1.05);
 }
 
 @keyframes holoIn {

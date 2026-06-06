@@ -61,7 +61,7 @@ W2F.State = {
 
     nuiFocused = false,
     cameraActive = false,
-    clickDebounce = 350,
+    clickDebounce = 70,
     lastClickTime = 0,
     lastPedClickTime = 0,
     characters = {},

@@ -17,7 +17,7 @@ W2F.Hud._lastVisible = nil  --- last visibility we pushed to NUI; gates updates.
 local HOLO_OFFSET_UP = 2.48   --- slightly lower so panel sits tighter to head
 local HOLO_BASE_DISTANCE = 6.3
 --- Rate (per second) used by the frame-rate independent smoother.
-local HOLO_SMOOTH_RATE = 16.0
+local HOLO_SMOOTH_RATE = 13.5
 local HOLO_CLARITY_SHARPEN = 1.22
 local HOLO_HIDDEN_PAYLOAD = { visible = false }
 
@@ -42,9 +42,13 @@ local function clearSmoothBuffers()
 end
 
 function W2F.Hud.Show(payload)
+    local wasActive = W2F.Hud.active
     W2F.Hud.data = payload or {}
     W2F.Hud.active = true
-    clearSmoothBuffers()
+    --- First selection clears buffers; switching characters keeps the glide.
+    if not wasActive then
+        clearSmoothBuffers()
+    end
 end
 
 function W2F.Hud.Hide()
