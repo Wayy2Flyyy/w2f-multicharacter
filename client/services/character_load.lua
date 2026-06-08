@@ -148,17 +148,28 @@ function W2F.CharacterLoad.Load(opts)
     --- Step 1: server-side login (skip when the player is already logged in
     --- as this citizenid — e.g. direct-to-apartment after createCharacter).
     if not opts.skipLogin then
-        local stepStarted = tnow()
-        local done, success = awaitWithTimeout('qbx_core:server:loadCharacter', t.serverLoad, citizenid)
-        if not done then
+        --- Orphaned-login guard: awaitWithTimeout spawns an uncancellable
+        --- thread, so a prior attempt that timed out client-side may have
+        --- completed the qbx login a moment later. On the retry the player is
+        --- already logged in as this citizenid; re-issuing loadCharacter would
+        --- trip qbx_core's "login twice" DropPlayer. Treat already-logged-in as
+        --- success and skip straight to the playerData validation below.
+        local pd0 = getPlayerData()
+        if pd0 and pd0.citizenid == citizenid then
+            recordSpan('charload.server_load', tnow())
+        else
+            local stepStarted = tnow()
+            local done, success = awaitWithTimeout('qbx_core:server:loadCharacter', t.serverLoad, citizenid)
+            if not done then
+                recordSpan('charload.server_load', stepStarted)
+                return fail('server_timeout')
+            end
+            if success == false then
+                recordSpan('charload.server_load', stepStarted)
+                return fail('server_denied')
+            end
             recordSpan('charload.server_load', stepStarted)
-            return fail('server_timeout')
         end
-        if success == false then
-            recordSpan('charload.server_load', stepStarted)
-            return fail('server_denied')
-        end
-        recordSpan('charload.server_load', stepStarted)
     end
 
     --- Step 2: wait for QBX playerData to reflect.
@@ -187,7 +198,9 @@ function W2F.CharacterLoad.Load(opts)
     if model then
         stepStarted = tnow()
         local hash = type(model) == 'string' and joaat(model) or model
-        if not hash or not IsModelInCdimage(hash) then
+        --- Reject a non-ped hash too: SetPlayerModel with a valid-in-cdimage but
+        --- non-ped model (corrupted/migrated character row) hard-crashes the game.
+        if not hash or not IsModelInCdimage(hash) or not IsModelAPed(hash) then
             return fail('model_invalid')
         end
         if lib and lib.requestModel then

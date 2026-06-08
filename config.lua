@@ -29,11 +29,17 @@ Config.CharacterCreation = {
     },
     --- Uses illenium-appearance when started; falls back to qb-clothes event.
     preferIllenium = true,
-    --- World coords used during the LEGACY appearance editor (only used when
-    --- `directToApartment` is false). The lineup interior is a tight space
-    --- and customization cameras tend to clip walls there, so the legacy
-    --- editor handed off to a clean outdoor location (LSIA south apron).
-    appearanceLocation = vec4(-1042.50, -2745.40, 21.36, 320.0),
+    --- World coords used during the non-apartment appearance editor (used when
+    --- `directToApartment` is false, or as the fallback when an apartment claim
+    --- can't be confirmed). The player ped is placed here and the editor camera
+    --- frames it from the front.
+    ---
+    --- Heading 73° faces the player from the "Main character location"
+    --- (-260.25, -982.19, 30.22) toward the "ped location" (-263.44, -981.2,
+    --- 30.22), so illenium's default 2.65m front camera lands right at that ped
+    --- spot for a clean head-to-feet shot. Nudge the heading (vec4.w) if the
+    --- backdrop behind the ped isn't clean.
+    appearanceLocation = vec4(-260.25, -982.19, 30.22, 73.0),
     --- Radius streamed in around the appearance location before the editor
     --- starts so the world has loaded by the time we fade in.
     appearanceStreamRadius = 75.0,
@@ -512,8 +518,11 @@ Config.Rendering = {
     --- Interior MLOs often need artificial lights forced on for correct look.
     artificialLights = true,
     --- Default lineup timecycle (profile overrides below).
+    --- Strength kept modest so the casino interior stays crisp and readable —
+    --- MP_corona_heist_blend adds a warm bloom/haze that washes out ped detail
+    --- and the holographic UI at higher strengths ("not clear").
     timecycle = 'MP_corona_heist_blend',
-    timecycleStrength = 0.22,
+    timecycleStrength = 0.15,
     timecycleEmergency = 'MP_corona_heist_blend',
     timecycleStrengthEmergency = 0.30,
     timecycleMedical = 'int_hospital2_dm',

@@ -127,6 +127,10 @@ local RATE_LIMITS = {
     getApartmentOptions= 250,
     resolveSpawnById   = 200,
     canClaimApartment  = 500,
+    --- Dedicated key (not shared with canClaimApartment) so a confirm landing
+    --- inside the canClaim window isn't falsely rejected. Bounds the ~25-query
+    --- 5s poll loop against modded-client spam for an owned citizenid.
+    confirmApartmentClaimed = 2000,
 }
 
 local function rateLimit(src, name)
@@ -237,6 +241,11 @@ local function clearSelectedIf(src, citizenid)
     local s = session[src]
     if s and s.selectedCitizenid == citizenid then
         s.selectedCitizenid = nil
+    end
+    --- Also clear the in-flight creation marker so a deleted/cancelled
+    --- character can't be rolled back a second time on disconnect.
+    if s and s.creatingCitizenid == citizenid then
+        s.creatingCitizenid = nil
     end
 end
 
@@ -733,6 +742,13 @@ lib.callback.register('w2f-multicharacter:server:createCharacter', function(sour
         --- without a separate selectCharacter round-trip.
         local sess = ensureSession(source)
         sess.selectedCitizenid = citizenid
+        --- In-flight creation marker: qbx_core:Login above already persisted the
+        --- players row, but appearance/apartment aren't committed yet. If the
+        --- player disconnects before a genuine completion point clears this, the
+        --- playerDropped handler rolls the half-created character back so it
+        --- doesn't orphan a slot. Cleared on appearance save / apartment claim /
+        --- finishCreation / cancel.
+        sess.creatingCitizenid = citizenid
 
         createdOk = true
         createdMeta = {
@@ -769,7 +785,12 @@ lib.callback.register('w2f-multicharacter:server:finishCreation', function(sourc
     --- Clear selection on logout-to-finalize so a follow-up requestSpawn
     --- can't reuse it before the next selectCharacter.
     local sess = session[source]
-    if sess then sess.selectedCitizenid = nil end
+    if sess then
+        sess.selectedCitizenid = nil
+        --- Creation is genuinely complete (legacy flow) — stop the disconnect
+        --- rollback from ever touching this committed character.
+        sess.creatingCitizenid = nil
+    end
 
     if W2F.Database and license then
         W2F.Database.Log(license, citizenid, 'finish_appearance', nil)
@@ -846,6 +867,9 @@ lib.callback.register('w2f-multicharacter:server:saveNewCharacterAppearance', fu
         if not verified then
             return false, 'verify_failed'
         end
+        --- Appearance is persisted — creation is committed; cancel the
+        --- disconnect rollback for this character.
+        if session[source] then session[source].creatingCitizenid = nil end
         return true
     end
 
@@ -915,6 +939,9 @@ lib.callback.register('w2f-multicharacter:server:saveNewCharacterAppearance', fu
     if not verified then
         return false, 'verify_failed'
     end
+    --- Appearance is persisted — creation is committed; cancel the disconnect
+    --- rollback for this character.
+    if session[source] then session[source].creatingCitizenid = nil end
     return true
 end)
 
@@ -1039,11 +1066,36 @@ lib.callback.register('w2f-multicharacter:server:cancelCreation', function(sourc
         pcall(function() exports.qbx_core:Logout(source) end)
     end
 
-    --- Always clear selection.
-    if session[source] then session[source].selectedCitizenid = nil end
+    --- Always clear selection + the in-flight creation marker (the character
+    --- was just rolled back, so the disconnect handler must not re-delete).
+    if session[source] then
+        session[source].selectedCitizenid = nil
+        session[source].creatingCitizenid = nil
+    end
 
     if W2F.Database and license then
         W2F.Database.Log(license, citizenid, 'cancel_appearance', nil)
+    end
+    return true
+end)
+
+--- Recovery-only logout. The apartment-claim and regular fly paths call
+--- qbx_core:Login (via CharacterLoad.Load without skipLogin) BEFORE the spawn
+--- finishes; if the spawn then fails and the client recovers to the lineup,
+--- the player is still logged in server-side, so the NEXT spawn's loadCharacter
+--- trips qbx_core's "login twice" DropPlayer. RecoverFromFailedSpawn awaits this
+--- to log them back out first.
+---
+--- CRITICAL: this must NEVER delete the character (do not reuse cancelCreation,
+--- which calls deleteCharacterFully) — it runs for fully valid EXISTING
+--- characters whose spawn merely failed. qbx_core:Logout is a safe no-op when
+--- the source isn't logged in.
+lib.callback.register('w2f-multicharacter:server:logoutForRecovery', function(source)
+    if Config.UseQbox and GetResourceState('qbx_core') == 'started' then
+        pcall(function() exports.qbx_core:Logout(source) end)
+    end
+    if session[source] then
+        session[source].selectedCitizenid = nil
     end
     return true
 end)
@@ -1284,6 +1336,9 @@ end)
 --- trust the event alone: wait for the property row so the audit reflects a
 --- real claim and callers can recover when qbx_properties fails or stops.
 lib.callback.register('w2f-multicharacter:server:confirmApartmentClaimed', function(source, apartmentIndex, citizenid)
+    if not rateLimit(source, 'confirmApartmentClaimed') then
+        return false
+    end
     if not isQbxPropertiesStarted() then
         if Config.Debug then print('[w2f-multicharacter] confirmApartmentClaimed failure: qbx_properties not started') end
         return false
@@ -1310,6 +1365,14 @@ lib.callback.register('w2f-multicharacter:server:confirmApartmentClaimed', funct
                     W2F.Database.Log(license, citizenid, 'apartment_claim_success', { index = apartmentIndex })
                 end
             end
+            --- The property row exists — the direct-to-apartment character is
+            --- committed (it now OWNS an apartment), so clear the in-flight
+            --- creation marker. Without this the marker would never clear for
+            --- direct-to-apartment characters (their appearance is saved later
+            --- by illenium's own event, not saveNewCharacterAppearance), and a
+            --- later disconnect would wrongly delete a valid, played-on,
+            --- apartment-owning character.
+            if session[source] then session[source].creatingCitizenid = nil end
             if Config.Debug then print(('[w2f-multicharacter] confirmApartmentClaimed success citizenid=%s propertyId=%s'):format(tostring(citizenid), tostring(row.id))) end
             return true
         end
@@ -1368,7 +1431,24 @@ RegisterNetEvent('w2f-multicharacter:server:resetSelectionBucket', function()
 end)
 
 AddEventHandler('playerDropped', function()
-    session[source] = nil
+    local src = source
+    local sess = session[src]
+    --- Capture the in-flight creation marker synchronously BEFORE clearing the
+    --- session. If the player Alt-F4'd mid-creation (after qbx_core:Login
+    --- persisted the players row, but before appearance/apartment committed),
+    --- roll the half-created character back so it doesn't orphan a slot.
+    --- Strictly gated on the explicit marker — never a heuristic like "no
+    --- playerskins row" which would delete a valid mid-edit character.
+    local pendingCid = sess and sess.creatingCitizenid or nil
+    session[src] = nil
+    if pendingCid then
+        CreateThread(function()
+            --- Let qbx_core's own playerDropped save settle first, then delete;
+            --- deleteCharacterFully's 2.5s verify loop out-waits a late re-save.
+            Wait(1000)
+            pcall(deleteCharacterFully, src, pendingCid)
+        end)
+    end
 end)
 
 --- Clear the selection when QBX logs the player out so a stale

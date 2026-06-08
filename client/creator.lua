@@ -185,24 +185,44 @@ local function preparePlayerForCustomization(coords, heading, gender)
     if not lib.requestModel(model, 10000) then
         return false, nil, 'model_load_failed'
     end
+    --- Is the ped ALREADY this freemode model? The save-failure reopen path
+    --- (saveAppearanceThenFinish -> OpenAppearance) re-enters with the
+    --- just-edited ped still loaded; used below to avoid wiping the edited
+    --- appearance back to neutral defaults.
+    local hadModel = GetEntityModel(PlayerPedId()) == model
     SetPlayerModel(PlayerId(), model)
 
     local timeout = GetGameTimer() + 5000
     while GetEntityModel(PlayerPedId()) ~= model and GetGameTimer() < timeout do
         Wait(0)
     end
+    --- Release our request reference on BOTH the success and timeout paths; the
+    --- ped holds its own reference post-swap so the model stays resident.
+    SetModelAsNoLongerNeeded(model)
     if GetEntityModel(PlayerPedId()) ~= model then
         return false, nil, 'model_swap_timeout'
     end
 
+    --- Ground-snap the placement Z. The configured appearance location stores a
+    --- nominal Z that can sit a few metres above the real ground; with the ped
+    --- unfrozen it would fall out of the camera frame the instant the appearance
+    --- editor opens ("can't see the ped"). Probe down from just above the
+    --- nominal Z (collision is already streamed in by the caller) and use the
+    --- ground when we found one meaningfully below.
+    local placeZ = coords.z
+    local foundGround, groundZ = GetGroundZFor_3dCoord(coords.x, coords.y, coords.z + 2.0, false)
+    if foundGround and (coords.z - groundZ) > 1.0 then
+        placeZ = groundZ
+    end
+
     local ped = PlayerPedId()
-    SetEntityCoords(ped, coords.x, coords.y, coords.z, false, false, false, false)
+    SetEntityCoords(ped, coords.x, coords.y, placeZ, false, false, false, false)
     SetEntityHeading(ped, heading or 0.0)
 
     --- Re-query — qbx_core / clothing resources may have swapped the ped
     --- during the model load and we must apply visibility to the live one.
     ped = PlayerPedId()
-    SetEntityCoords(ped, coords.x, coords.y, coords.z, false, false, false, false)
+    SetEntityCoords(ped, coords.x, coords.y, placeZ, false, false, false, false)
     SetEntityHeading(ped, heading or 0.0)
     SetEntityVisible(ped, true, false)
     ResetEntityAlpha(ped)
@@ -211,6 +231,28 @@ local function preparePlayerForCustomization(coords, heading, gender)
     SetPedConfigFlag(ped, 32, false)
     FreezeEntityPosition(ped, false)
     ClearPedTasksImmediately(ped)
+
+    --- Initialise the freemode ped's appearance so it RENDERS immediately. The
+    --- raw SetPlayerModel above leaves head-blend + component variation
+    --- uninitialised, and the engine won't draw a freemode ped until that data
+    --- exists — so without this the character stays invisible until the player
+    --- first touches the creation menu (e.g. changes mother/father, which fires
+    --- the first SetPedHeadBlendData). Mirrors illenium-appearance's own
+    --- setPlayerModel defaults.
+    ---
+    --- Only on a GENUINE model swap: on the save-failure reopen the ped is
+    --- already the edited model, so re-applying neutral defaults would snap the
+    --- just-edited face/body back to default before the editor reappears.
+    if not hadModel then
+        if model == `mp_f_freemode_01` then
+            SetPedDefaultComponentVariation(ped)
+            SetPedHeadBlendData(ped, 45, 21, 0, 20, 15, 0, 0.3, 0.1, 0.0, false)
+        elseif model == `mp_m_freemode_01` then
+            SetPedDefaultComponentVariation(ped)
+            SetPedHeadBlendData(ped, 0, 0, 0, 0, 0, 0, 0.0, 0.0, 0.0, false)
+        end
+    end
+
     return true, ped
 end
 
@@ -270,6 +312,46 @@ function W2F.Creator.OpenAppearance(gender, coords, heading)
         end
     end
 
+    --- Recover the appearance phase if illenium never fires its callback
+    --- (silent error, or the resource is stopped/restarted). Without this the
+    --- creator input-lock loop (`while Session.In('creating','appearance')`)
+    --- pins the player with controls disabled and a half-created character.
+    local function appearanceRecover(reason)
+        if W2F.Watchdog then W2F.Watchdog.Disarm('appearance') end
+        W2F.Creator._appearanceRecover = nil
+        --- Tell illenium to hard-abort its editor (camera off + NUI hidden +
+        --- stats restored) WITHOUT re-invoking its callback — we run our own
+        --- recovery below. abortPlayerCustomization is a safe no-op / swallowed
+        --- 'No such export' on builds that don't have it.
+        pcall(function()
+            if GetResourceState('illenium-appearance') == 'started' then
+                exports['illenium-appearance']:abortPlayerCustomization()
+            end
+        end)
+        SetNuiFocus(false, false)
+        if SetNuiFocusKeepInput then SetNuiFocusKeepInput(false) end
+        pcall(function() TriggerServerEvent('illenium-appearance:server:ResetRoutingBucket') end)
+        teardownStreaming()
+        W2F.Creator.HideMulticharUiForAppearance('appearance_recover_' .. tostring(reason))
+        pcall(function() lib.callback.await('w2f-multicharacter:server:cancelCreation', false) end)
+        W2F.Creator.ReturnToSelection(false)
+    end
+
+    --- Re-arming watchdog: while the player is legitimately editing illenium
+    --- holds NUI focus, so we re-arm instead of recovering; only a loss of
+    --- focus while still pinned in 'appearance' (i.e. illenium died) recovers.
+    local function armAppearanceWatchdog()
+        if not (W2F.Watchdog and W2F.Watchdog.Arm) then return end
+        W2F.Watchdog.Arm('appearance', 120000, function()
+            if not W2F.Session.Is('appearance') then return end
+            if IsNuiFocused() then
+                armAppearanceWatchdog()
+                return
+            end
+            appearanceRecover('watchdog')
+        end)
+    end
+
     if cc.preferIllenium ~= false and GetResourceState('illenium-appearance') == 'started' then
         TriggerServerEvent('illenium-appearance:server:ChangeRoutingBucket')
         Wait(200)
@@ -285,7 +367,16 @@ function W2F.Creator.OpenAppearance(gender, coords, heading)
             enableExit = false,
         }
 
+        --- Expose the recover hook so onClientResourceStop can fire it instantly
+        --- if illenium is restarted (rather than waiting for the watchdog).
+        W2F.Creator._appearanceRecover = appearanceRecover
+        armAppearanceWatchdog()
+
         exports['illenium-appearance']:startPlayerCustomization(function(appearance)
+            --- FIRST: stop the watchdog + instant-recover hook so neither fires
+            --- on the now-completed handoff.
+            if W2F.Watchdog then W2F.Watchdog.Disarm('appearance') end
+            W2F.Creator._appearanceRecover = nil
             TriggerServerEvent('illenium-appearance:server:ResetRoutingBucket')
             teardownStreaming()
 
@@ -553,15 +644,37 @@ function W2F.Creator.SpawnDirectlyInApartment()
         while not IsScreenFadedOut() do Wait(0) end
     end
 
+    --- Generation token so the watchdog can CANCEL this in-flight coroutine.
+    --- Without it the watchdog rolls the character back (delete + logout) while
+    --- the coroutine is still suspended on an await; when that await resumes it
+    --- would re-fire apartmentSelect for a deleted/logged-out citizenid and fall
+    --- through into FirePlayerLoadedEvents on corrupted state. Every await below
+    --- is followed by `if aborted() then return end`.
+    W2F.Creator.aptRun = (W2F.Creator.aptRun or 0) + 1
+    local myRun = W2F.Creator.aptRun
+    local function aborted() return W2F.Creator.aptRun ~= myRun end
+
     --- Watchdog: if the whole "login + apartment claim + clothing open"
     --- sequence stalls for any reason (slow MySQL, missing qbx_properties,
     --- model swap timeout, ...) we must recover instead of leaving the
     --- player stranded on a black screen.
     if W2F.Watchdog and W2F.Watchdog.Arm then
         W2F.Watchdog.Arm('creator_apt', 25000, function()
+            --- Invalidate the in-flight run FIRST so a late-resuming await bails
+            --- at its next aborted() checkpoint instead of mutating state.
+            W2F.Creator.aptRun = (W2F.Creator.aptRun or 0) + 1
             if W2F.Debug then W2F.Debug('SpawnDirectlyInApartment watchdog tripped') end
             if IsScreenFadedOut() then DoScreenFadeIn(500) end
-            W2F.Creator.ReturnToSelection(true)
+            --- createCharacter already logged the player in as this new
+            --- character. A 25s stall means the apartment handoff never
+            --- completed, so roll the half-created character back (server-side
+            --- logout + delete) before returning to the lineup. Without this,
+            --- the next spawn calls qbx_core loadCharacter while the player is
+            --- still logged in, which qbx rejects as a "login twice" kick.
+            pcall(function()
+                lib.callback.await('w2f-multicharacter:server:cancelCreation', false)
+            end)
+            W2F.Creator.ReturnToSelection(false)
         end)
     end
 
@@ -585,6 +698,7 @@ function W2F.Creator.SpawnDirectlyInApartment()
     --- server (also acts as an ownership / qbx_properties sanity check).
     local apts = lib.callback.await('w2f-multicharacter:server:getApartmentOptions',
         false, citizenid) or {}
+    if aborted() then return end
     local enterCoords
     if type(apts) == 'table' then
         for i = 1, #apts do
@@ -630,6 +744,7 @@ function W2F.Creator.SpawnDirectlyInApartment()
         selectOk = lib.callback.await('w2f-multicharacter:server:selectCharacter',
             false, citizenid)
     end
+    if aborted() then return end
     if not selectOk then
         abort('select_failed', 'Could not select your new character.')
         return
@@ -644,6 +759,7 @@ function W2F.Creator.SpawnDirectlyInApartment()
         coords = enterCoords,
         skipLogin = true,
     })
+    if aborted() then return end
     if not loaded then
         abort(tostring(reason), ('Could not load character (%s).'):format(tostring(reason)))
         return
@@ -653,6 +769,7 @@ function W2F.Creator.SpawnDirectlyInApartment()
     --- "you must be logged in as the new character" branch sees us).
     local canClaim, claimErr = lib.callback.await('w2f-multicharacter:server:canClaimApartment',
         false, apartmentIndex, citizenid)
+    if aborted() then return end
     if not canClaim then
         if W2F.Watchdog then W2F.Watchdog.Disarm('creator_apt') end
         dbg('apartment claim precheck failed; falling back to legacy appearance reason=%s', tostring(claimErr))
@@ -672,6 +789,9 @@ function W2F.Creator.SpawnDirectlyInApartment()
     ---   4. fires `qb-clothes:client:CreateFirstCharacter` on the client,
     ---      which illenium-appearance / qb-clothes both listen for and use
     ---      to open the clothing editor at the player's current position.
+    --- CRITICAL: bail here if the watchdog already rolled the character back, so
+    --- we don't create an orphaned property row for a deleted citizenid.
+    if aborted() then return end
     TriggerServerEvent('qbx_properties:server:apartmentSelect', apartmentIndex)
 
     --- Step 6: audit the claim (the await also gives qbx ~50-100ms to start
@@ -682,6 +802,7 @@ function W2F.Creator.SpawnDirectlyInApartment()
             false, apartmentIndex, citizenid)
     end)
     dbg('confirmApartmentClaimed %s', confirmOk and claimed and 'success' or 'failure')
+    if aborted() then return end
     if not confirmOk or not claimed then
         if W2F.Watchdog then W2F.Watchdog.Disarm('creator_apt') end
         lib.notify({
@@ -698,8 +819,14 @@ function W2F.Creator.SpawnDirectlyInApartment()
     local finOk = W2F.Session.Transition('finalizing', 'creator_apt_claim')
     if not finOk then
         --- Shouldn't happen but never trust the state machine; force a
-        --- recover so the player isn't stuck in `creating`.
+        --- recover so the player isn't stuck in `creating`. The apartment is
+        --- already CLAIMED (committed) at this point, so disarm the watchdog
+        --- first — otherwise it would fire cancelCreation and DELETE a valid,
+        --- apartment-owning character — and `return` so we don't fall through to
+        --- FirePlayerLoadedEvents / fade on a rejected transition.
+        if W2F.Watchdog then W2F.Watchdog.Disarm('creator_apt') end
         W2F.Session.Recover('creator_apt_claim_invalid')
+        return
     end
 
     --- Step 8: clear lineup visuals / camera / focus. Cleanup.Full also
@@ -738,17 +865,24 @@ end
 --- re-trigger the lineup mid-flight.
 -----------------------------------------------------------------------------
 local function awaitSelectCharacter(citizenid)
+    --- pcall the await: a rejected/timed-out callback (ox_lib throws through
+    --- Citizen.Await on its internal timeout) would otherwise kill this thread
+    --- before the caller's ReturnToSelection fallback runs. The second arg stays
+    --- `false` (no callback) — it is NOT a timeout; a number would no-op retries.
+    local function trySelect()
+        local ok, res = pcall(lib.callback.await, 'w2f-multicharacter:server:selectCharacter', false, citizenid)
+        return ok and res
+    end
     --- Exponential backoff. The first call can race with QBX's logout cleanup
     --- and get rejected on cooldown; subsequent attempts wait progressively
     --- longer so we don't hammer the rate limit.
     for i, delay in ipairs(SELECT_RETRY_DELAYS_MS) do
-        local ok = lib.callback.await('w2f-multicharacter:server:selectCharacter', false, citizenid)
-        if ok then return true end
+        if trySelect() then return true end
         Wait(delay)
         dbg('selectCharacter retry %d/%d (waiting %dms)', i, #SELECT_RETRY_DELAYS_MS, delay)
     end
     --- Final attempt.
-    return lib.callback.await('w2f-multicharacter:server:selectCharacter', false, citizenid)
+    return trySelect()
 end
 
 function W2F.Creator.GoDirectlyToSpawn()
@@ -773,6 +907,18 @@ function W2F.Creator.GoDirectlyToSpawn()
     --- Suppress auto-open: held until `playing` is reached.
     W2F.Creator.suppressAutoOpen = true
 
+    --- Watchdog: the fade-out + tutorial-session loop + up to 5 selectCharacter
+    --- awaits all block while the screen is black. A non-responding server (qbx
+    --- mid-restart) would otherwise hang behind ox_lib's long callback timeout —
+    --- a black-screen soft-lock. Recover to the lineup if the handoff stalls.
+    if W2F.Watchdog and W2F.Watchdog.Arm then
+        W2F.Watchdog.Arm('go_direct_spawn', 20000, function()
+            if IsScreenFadedOut() then DoScreenFadeIn(500) end
+            W2F.Creator.suppressAutoOpen = false
+            W2F.Creator.ReturnToSelection(true)
+        end)
+    end
+
     DoScreenFadeOut(450)
     while not IsScreenFadedOut() do Wait(0) end
 
@@ -793,6 +939,7 @@ function W2F.Creator.GoDirectlyToSpawn()
 
     local selectOk = awaitSelectCharacter(citizenid)
     if not selectOk then
+        if W2F.Watchdog then W2F.Watchdog.Disarm('go_direct_spawn') end
         lib.notify({
             title = 'Character',
             description = 'Could not select new character. Returning to lineup.',
@@ -811,11 +958,14 @@ function W2F.Creator.GoDirectlyToSpawn()
     W2F.SetSelected(W2F.State.pendingVisualSlot, nil, character)
 
     if not (W2F.Spawner and W2F.Spawner.OpenFirstSpawnPicker) then
+        if W2F.Watchdog then W2F.Watchdog.Disarm('go_direct_spawn') end
         W2F.Creator.ReturnToSelection(true)
         return
     end
 
     W2F.Spawner.OpenFirstSpawnPicker()
+    --- Handoff to the spawn picker succeeded; the picker owns the flow now.
+    if W2F.Watchdog then W2F.Watchdog.Disarm('go_direct_spawn') end
 
     --- Clear suppression only after the player has actually entered the
     --- world (`playing`). We attach a one-shot listener so a late logout
@@ -903,4 +1053,18 @@ RegisterNUICallback('cancelCreateCharacter', function(_, cb)
     W2F.State.pendingVisualSlot = nil
     W2F.Creator.CloseRegistration()
     cb({ ok = true })
+end)
+
+--- If illenium-appearance is stopped/restarted while the player is mid-edit,
+--- recover the appearance phase IMMEDIATELY instead of waiting up to the
+--- watchdog interval. The recover hook is only set while the illenium editor is
+--- the active handoff (cleared the moment its callback fires).
+AddEventHandler('onClientResourceStop', function(res)
+    if res ~= 'illenium-appearance' then return end
+    if not (W2F.Session and W2F.Session.Is('appearance')) then return end
+    local recover = W2F.Creator._appearanceRecover
+    if recover then
+        W2F.Creator._appearanceRecover = nil
+        CreateThread(function() pcall(recover, 'illenium_stopped') end)
+    end
 end)

@@ -274,10 +274,21 @@ function W2F.Interaction.StartLoop()
             W2F.Camera.Update()
 
             --- Cinematic + dragging paths need every frame to stay buttery.
+            --- The LOCKED overview/focused camera is also continuously
+            --- animating — it smooths its focal toward the selected ped, runs
+            --- idle drift, and settles rotation. Driving W2F.Camera.Update()
+            --- only every `selectionTick` ms (≈50 Hz) while the display renders
+            --- at 120-144 Hz makes that motion visibly stutter (the cam holds
+            --- the same transform for 2-3 frames, then jumps). Update the
+            --- scripted camera every frame whenever it is active in an
+            --- interactive phase; the hover raycast stays independently
+            --- throttled by `hoverIntervalMs`, so this costs almost nothing.
             local needsHighFps = W2F.State.isIntroPlaying
                 or W2F.State.isDraggingCamera
                 or W2F.Session.In('sky_picker', 'flying', 'finalizing')
                 or (W2F.Camera and W2F.Camera.cinematic)
+                or (W2F.Camera and W2F.Camera.active
+                    and (W2F.Camera.mode == 'overview' or W2F.Camera.mode == 'focused'))
 
             local perf = Config.Performance or {}
             local selectionTick = (W2F.Performance and W2F.Performance.Get and W2F.Performance.Get('selectionLoopMs'))

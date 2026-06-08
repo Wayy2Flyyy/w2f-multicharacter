@@ -81,7 +81,19 @@ function W2F.Watchdog.Arm(name, timeoutMs, recover)
 
         --- Last-resort safety net: even if `recover` didn't move us, force
         --- a `recovering` transition so the session machine can clean up.
-        if W2F.Session and W2F.Session.IsActive and W2F.Session.IsActive() then
+        --- BUT skip it when:
+        ---   * the recover callback RE-ARMED this watchdog (armed[name] is
+        ---     non-nil again) — a self-re-arming watchdog (e.g. the appearance
+        ---     editor's, which re-arms while the player is still editing)
+        ---     deliberately did NOT move the phase, so recovering here would
+        ---     tear the world down on an actively-editing player; or
+        ---   * we already landed in `selection`/`recovering` — recovering again
+        ---     would fire `recovering`'s OnEnter teardown on the freshly rebuilt
+        ---     lineup with nothing to re-enter selection (a hard soft-lock).
+        if W2F.Session and W2F.Session.IsActive and W2F.Session.IsActive()
+            and not (W2F.Watchdog.IsArmed and W2F.Watchdog.IsArmed(name))
+            and not W2F.Session.Is('selection')
+            and not W2F.Session.Is('recovering') then
             W2F.Session.Recover('watchdog_' .. name)
         end
     end)

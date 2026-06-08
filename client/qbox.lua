@@ -52,7 +52,11 @@ function W2F.Qbox.GetPreviewPedData(citizenid)
 
     local appearance = clothing
     if type(clothing) == 'string' then
-        appearance = json.decode(clothing)
+        --- A corrupt/truncated playerskins.skin row would throw here and abort
+        --- the whole BuildLineup loop, locking the account out of selection.
+        --- Degrade to nil so ApplyAppearanceToPed falls back to the default ped.
+        local ok, decoded = pcall(json.decode, clothing)
+        appearance = ok and decoded or nil
     end
 
     return model, appearance

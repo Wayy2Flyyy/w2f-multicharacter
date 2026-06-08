@@ -222,6 +222,13 @@ function W2F.Camera.Create(focal)
     W2F.Camera.smoothYaw = initialRot.z
     SetCamFov(W2F.Camera.handle, W2F.Camera.currentFov)
     SetCamActive(W2F.Camera.handle, true)
+    --- Kill the default per-camera motion blur so the locked lineup reads
+    --- crisp. With blur on, the slow focal/idle-drift motion smears the peds
+    --- and UI overlay ("not clear"); the lineup is a near-static showcase
+    --- shot where motion blur only hurts.
+    if SetCamMotionBlurStrength then
+        SetCamMotionBlurStrength(W2F.Camera.handle, 0.0)
+    end
     RenderScriptCams(true, false, 0, true, true)
 
     W2F.Camera.active = true

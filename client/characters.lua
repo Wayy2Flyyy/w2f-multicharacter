@@ -65,7 +65,10 @@ end
 
 local function loadModel(model)
     local hash = type(model) == 'string' and joaat(model) or model
-    if not IsModelInCdimage(hash) then
+    --- Fall back to freemode if the hash isn't streamable OR isn't a ped. A
+    --- valid-in-cdimage but non-ped hash (corrupted/migrated character row, or a
+    --- vehicle/object hash) passed to CreatePed hard-crashes the game.
+    if not IsModelInCdimage(hash) or not IsModelAPed(hash) then
         hash = `mp_m_freemode_01`
     end
     lib.requestModel(hash, 10000)

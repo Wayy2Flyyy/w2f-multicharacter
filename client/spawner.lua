@@ -19,6 +19,7 @@
 
 W2F.Spawner = {}
 W2F.Spawner.previewLoopActive = false
+W2F.Spawner.recovering = false
 W2F.Spawner.previewAnchor = nil
 W2F.Spawner.previewCamAnchor = nil
 W2F.Spawner.previewTargets = {}
@@ -459,6 +460,9 @@ local function createSkyCamDirect()
         PointCamAtCoord(cam, focal.x, focal.y, focal.z)
     end
     SetCamActive(cam, true)
+    if SetCamMotionBlurStrength then
+        SetCamMotionBlurStrength(cam, 0.0)
+    end
     RenderScriptCams(true, false, 0, true, true)
     W2F.State.cameraActive = true
 
@@ -565,57 +569,79 @@ end
 --- Recovery (always-faded-in, controls-enabled, NUI message surfaced).
 -----------------------------------------------------------------------------
 function W2F.Spawner.RecoverFromFailedSpawn(message)
-    --- Always disarm spawn watchdogs first so they can't fire during
-    --- recovery and cascade us back into another recovering transition.
-    if W2F.Watchdog then
-        W2F.Watchdog.Disarm('sky_rise')
-        W2F.Watchdog.Disarm('fly')
-        W2F.Watchdog.Disarm('finalize')
-    end
+    --- Re-entrancy guard: concurrent failure paths (an inline error AND the
+    --- watchdog last-resort net, or two failing awaits) must not double-run
+    --- recovery and stack duplicate toasts / NUI envelopes / EnterSelection.
+    --- The pcall guarantees the flag clears even if a listener throws — without
+    --- it, one exception would permanently disable all future recovery.
+    if W2F.Spawner.recovering then return end
+    W2F.Spawner.recovering = true
+    local ok, err = pcall(function()
+        --- Always disarm spawn watchdogs first so they can't fire during
+        --- recovery and cascade us back into another recovering transition.
+        if W2F.Watchdog then
+            W2F.Watchdog.Disarm('sky_rise')
+            W2F.Watchdog.Disarm('fly')
+            W2F.Watchdog.Disarm('finalize')
+        end
 
-    --- Surface the failure: notification + NUI envelope (Phase 5 makes the
-    --- NUI actually display data.message).
-    local msg = message or 'Spawn failed. Try again.'
-    lib.notify({ title = 'Spawn', description = msg, type = 'error' })
-    if W2F.Nui and W2F.Nui.SendResult then
-        W2F.Nui.SendResult('spawnFailed', false, msg)
-    else
-        W2F.SendNui('spawnFailed', { message = msg })
-    end
+        --- Surface the failure: notification + NUI envelope (Phase 5 makes the
+        --- NUI actually display data.message).
+        local msg = message or 'Spawn failed. Try again.'
+        lib.notify({ title = 'Spawn', description = msg, type = 'error' })
+        if W2F.Nui and W2F.Nui.SendResult then
+            W2F.Nui.SendResult('spawnFailed', false, msg)
+        else
+            W2F.SendNui('spawnFailed', { message = msg })
+        end
 
-    if W2F.Telemetry and W2F.Telemetry.RecordFailure then
-        W2F.Telemetry.RecordFailure('spawn', msg)
-    end
+        if W2F.Telemetry and W2F.Telemetry.RecordFailure then
+            W2F.Telemetry.RecordFailure('spawn', msg)
+        end
 
-    releaseStreamHandle()
-    resetSpawnLoadFlags()
-    W2F.Spawner.previewLoopActive = false
+        releaseStreamHandle()
+        resetSpawnLoadFlags()
+        W2F.Spawner.previewLoopActive = false
 
-    --- Force-fade in so the player isn't stuck on a black screen.
-    if IsScreenFadedOut() then DoScreenFadeIn(500) end
+        --- Force-fade in so the player isn't stuck on a black screen.
+        if IsScreenFadedOut() then DoScreenFadeIn(500) end
 
-    W2F.Camera.cinematic = nil
-    W2F.Camera.mode = 'overview'
-    if W2F.Camera and W2F.Camera.modeState then
-        W2F.Camera.modeState.overview = true
-        W2F.Camera.modeState.focused = false
-        W2F.Camera.modeState.sky = false
-        W2F.Camera.modeState.flyToSpawn = false
-        W2F.Camera.modeState.descent = false
-        W2F.Camera.modeState.cinematic = false
-    end
+        W2F.Camera.cinematic = nil
+        W2F.Camera.mode = 'overview'
+        if W2F.Camera and W2F.Camera.modeState then
+            W2F.Camera.modeState.overview = true
+            W2F.Camera.modeState.focused = false
+            W2F.Camera.modeState.sky = false
+            W2F.Camera.modeState.flyToSpawn = false
+            W2F.Camera.modeState.descent = false
+            W2F.Camera.modeState.cinematic = false
+        end
 
-    --- Transition to recovering, then back into selection.
-    W2F.Session.Recover('spawn_fail')
+        --- The apartment-claim and regular fly paths log the player in BEFORE
+        --- the spawn completes (CharacterLoad.Load WITHOUT skipLogin). If we
+        --- recover after that, the player is still logged in server-side, so the
+        --- next spawn's loadCharacter would trip qbx_core's "login twice"
+        --- DropPlayer kick. Log back out first. Awaited (not fire-and-forget)
+        --- because qbx Logout does an internal save + Wait(200) before clearing
+        --- the player. logoutForRecovery NEVER deletes the character.
+        pcall(function() lib.callback.await('w2f-multicharacter:server:logoutForRecovery', false) end)
 
-    if W2F.Cleanup and W2F.Cleanup.EnableAllControls then
-        W2F.Cleanup.EnableAllControls()
-    end
+        --- Transition to recovering, then back into selection.
+        W2F.Session.Recover('spawn_fail')
 
-    --- Returning to selection from any spawn phase: rebuild the lineup.
-    Wait(250)
-    if W2F.EnterSelection then
-        W2F.EnterSelection('recover')
+        if W2F.Cleanup and W2F.Cleanup.EnableAllControls then
+            W2F.Cleanup.EnableAllControls()
+        end
+
+        --- Returning to selection from any spawn phase: rebuild the lineup.
+        Wait(250)
+        if W2F.EnterSelection then
+            W2F.EnterSelection('recover')
+        end
+    end)
+    W2F.Spawner.recovering = false
+    if not ok then
+        print(('[w2f-multicharacter] RecoverFromFailedSpawn error: %s'):format(tostring(err)))
     end
 end
 
@@ -741,7 +767,13 @@ function W2F.Spawner.ClaimApartment(apartmentIndex)
             end
         end
     end
-    coords = coords or vec4(0.0, 0.0, 72.0, 0.0)
+    --- Never fall back to a hard-coded placeholder (the old `vec4(0,0,72)`
+    --- silently teleported the player into the Maze Bank void). If the cached
+    --- apartment options don't contain this index's coords, recover cleanly.
+    if not coords then
+        W2F.Spawner.RecoverFromFailedSpawn('Could not resolve apartment location.')
+        return
+    end
 
     DoScreenFadeOut(550)
     while not IsScreenFadedOut() do Wait(0) end
@@ -969,13 +1001,24 @@ RegisterNUICallback('cancelSkySpawn', function(_, cb)
         return
     end
     --- Tear down the sky picker UI + recover to selection.
+    --- The skipRise sky picker reuses the OVERVIEW camera (RunCinematic never
+    --- clears Camera.active), so we MUST destroy the camera here. Otherwise
+    --- EnterSelection's `Is('selection') and Camera.active` guard treats the
+    --- lineup as already up and no-ops, stranding the player on the sky cam with
+    --- no characters. Destroy first (clears Camera.active), then let
+    --- EnterSelection own the transition (sky_picker -> selection is allowed).
     W2F.SendNui('hideSkySpawnOptions', {})
     W2F.Spawner.previewLoopActive = false
     W2F.Spawner.previewHoveredId = nil
     if W2F.Camera and W2F.Camera.cinematic then W2F.Camera.cinematic = nil end
+    if W2F.Camera and W2F.Camera.Destroy then W2F.Camera.Destroy() end
     if IsScreenFadedOut() then DoScreenFadeIn(400) end
-    W2F.Session.Transition('selection', 'sky_cancel')
-    if W2F.EnterSelection then W2F.EnterSelection('sky_cancel') end
+    --- If EnterSelection can't proceed (spawn cooldown, deps not ready, re-entry
+    --- in-flight) the camera is already gone, so fall back to the full recovery
+    --- path rather than leaving the player on a black screen.
+    if not (W2F.EnterSelection and W2F.EnterSelection('sky_cancel')) then
+        W2F.Spawner.RecoverFromFailedSpawn('Returned to selection.')
+    end
     cb({ ok = true })
 end)
 
