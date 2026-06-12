@@ -629,31 +629,32 @@ end)
 --- Mitigations layered:
 ---   1. Per-source rate limit (2.5s) - protects against double-click and
 ---      most accidental races.
----   2. Per-license advisory lock (`getLock`) ensures that slot allocation
----      runs serially for the same player even across sessions.
+---   2. Process-local `creatingLicenses` set ensures that slot allocation runs
+---      serially for the same player across concurrent sessions.
 ---   3. SQL UNIQUE INDEX `(license, cid)` is the last line of defence; the
 ---      second INSERT errors out cleanly and the player sees "slot taken".
+---
+--- NOTE: A MySQL `GET_LOCK`/`RELEASE_LOCK` advisory lock was previously used
+--- here but has been removed. Those locks are per-connection (per-session),
+--- and oxmysql multiplexes queries across a connection pool — so `RELEASE_LOCK`
+--- frequently ran on a different pooled connection than the one `GET_LOCK`
+--- acquired it on, leaking the lock. The next same-license create then blocked
+--- for the full timeout, producing "took 5000ms to execute" slow-query
+--- warnings (`SELECT GET_LOCK(?, ?)`). The process-local set + UNIQUE INDEX
+--- below provide the same guarantees without the connection-pool footgun.
 -----------------------------------------------------------------------------
 --- Process-local set of licenses with an in-flight character creation. The
 --- FXServer runs this resource in a single Lua state, so this reliably blocks
---- concurrent same-license creates regardless of `GET_LOCK`'s per-connection
---- flakiness under oxmysql connection pooling. The DB advisory lock + UNIQUE
---- INDEX remain as secondary/last-line protection.
+--- concurrent same-license creates. The UNIQUE INDEX remains as a last-line
+--- DB-level safeguard.
 local creatingLicenses = {}
 
 local function withLicenseLock(license, timeoutSec, fn)
-    timeoutSec = timeoutSec or 5
-    local lockName = ('w2fmc_%s'):format(license)
-    --- `GET_LOCK` is per-connection; oxmysql multiplexes connections so this
-    --- is best-effort. We additionally rely on the UNIQUE INDEX below.
-    local got = MySQL.scalar.await('SELECT GET_LOCK(?, ?)', { lockName, timeoutSec })
-    if got ~= 1 then
-        return fn(false)
-    end
-    local ok, a, b = pcall(fn, true)
-    MySQL.scalar.await('SELECT RELEASE_LOCK(?)', { lockName })
-    if not ok then error(a) end
-    return a, b
+    --- Serialization is handled by the process-local `creatingLicenses` set
+    --- (set by the caller before this runs) and the UNIQUE INDEX. No DB
+    --- advisory lock is taken here — see the note above. `license`/`timeoutSec`
+    --- are kept in the signature for call-site compatibility.
+    return fn(true)
 end
 
 lib.callback.register('w2f-multicharacter:server:createCharacter', function(source, payload)

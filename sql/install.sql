@@ -148,8 +148,9 @@ CREATE TABLE IF NOT EXISTS `w2f_multicharacter_log` (
 -- -----------------------------------------------------------------------------
 -- (license, cid) uniqueness: prevents the TOCTOU race in createCharacter
 -- where two concurrent creates could both pick cid=1 on the same license.
--- The application also serializes with GET_LOCK + a transaction, but this
--- is the last line of defence at the DB level.
+-- The application also serializes with a process-local in-flight set (the
+-- resource runs in a single Lua state), but this UNIQUE KEY is the last line
+-- of defence at the DB level.
 SET @stmt := (
   SELECT IF(
     EXISTS (
