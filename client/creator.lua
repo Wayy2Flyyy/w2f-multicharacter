@@ -392,6 +392,39 @@ function W2F.Creator.OpenAppearance(gender, coords, heading)
         return
     end
 
+    --- ESX fallback: esx_skin's saveable menu. esx_skin persists the skin to
+    --- users.skin itself on submit, so we go through saveNewCharacterAppearance
+    --- with a nil payload afterwards (the server's verify-only branch).
+    if W2F.ESX and W2F.ESX.IsActive and W2F.ESX.IsActive()
+        and GetResourceState('esx_skin') == 'started' then
+        local finished, savedEsx = false, false
+        TriggerEvent('esx_skin:openSaveableMenu', function()
+            savedEsx = true
+            finished = true
+        end, function()
+            finished = true
+        end)
+
+        CreateThread(function()
+            local deadline = GetGameTimer() + 300000
+            while not finished and GetGameTimer() < deadline do
+                Wait(250)
+            end
+            teardownStreaming()
+
+            if not savedEsx then
+                dbg('appearance save failure (esx_skin menu cancelled or timed out)')
+                W2F.Creator.HideMulticharUiForAppearance('esx_skin_appearance_cancelled')
+                lib.callback.await('w2f-multicharacter:server:cancelCreation', false)
+                W2F.Creator.ReturnToSelection(false)
+                return
+            end
+
+            saveAppearanceThenFinish(nil, cc, gender, coords, heading)
+        end)
+        return
+    end
+
     --- Fallback: qb-clothes flow. We wait on a save event so we don't poll
     --- for IsNuiFocused (the old fallback waited 5 minutes for the editor
     --- to close, which produced ghost sessions if the player Alt-F4'd).

@@ -1,6 +1,6 @@
 # w2f-multicharacter
 
-Cinematic multicharacter selection for **Qbox** — character create / select / delete / spawn, with illenium-appearance and optional starter apartments.
+Cinematic multicharacter selection for **Qbox** (with optional **ESX** support) — character create / select / delete / spawn, with illenium-appearance and optional starter apartments.
 
 # Preview 
 <img width="1487" height="840" alt="image" src="https://github.com/user-attachments/assets/40fc47ad-b28e-4313-9f9e-b9a9e7847cfe" />
@@ -11,9 +11,11 @@ Cinematic multicharacter selection for **Qbox** — character create / select / 
 
 - [ox_lib](https://github.com/overextended/ox_lib)
 - [oxmysql](https://github.com/overextended/oxmysql)
-- [qbx_core](https://github.com/Qbox-project/qbx_core)
-- [illenium-appearance](https://github.com/iLLeniumStudios/illenium-appearance) — required for new-character clothing
-- [qbx_properties](https://github.com/Qbox-project/qbx_properties) — only if you use the default starter-apartment flow
+- A framework core — one of:
+  - [qbx_core](https://github.com/Qbox-project/qbx_core) (default, full feature set)
+  - [es_extended](https://github.com/esx-framework/esx_core) (ESX Legacy, multichar mode — see [Using with ESX](#using-with-esx))
+- [illenium-appearance](https://github.com/iLLeniumStudios/illenium-appearance) — required for new-character clothing (on ESX, esx_skin works as a fallback)
+- [qbx_properties](https://github.com/Qbox-project/qbx_properties) — only if you use the default starter-apartment flow (Qbox only)
 
 ## Install
 
@@ -88,10 +90,53 @@ ensure w2f-multicharacter
 
 If selection does not open, check the server console for missing-table warnings from `server/database.lua`.
 
+## Using with ESX
+
+ESX Legacy is supported as an alternative framework. Characters are stored the same way `esx_multicharacter` stores them: one `users` row per character with a `char<slot>:<license>` identifier, so existing multichar databases keep working.
+
+### ESX setup
+
+1. In `config.lua`, set the framework (or leave `'auto'` — es_extended is detected when no QB core is running):
+
+   ```lua
+   Config.Framework = 'esx'
+   ```
+
+2. Enable es_extended's multichar mode in `server.cfg` (this makes es_extended defer login to this resource):
+
+   ```cfg
+   setr esx:multichar true
+   ```
+
+3. **Do not run `esx_multicharacter`** (or any other multicharacter/spawn-select resource) alongside this one.
+
+4. Start order:
+
+   ```cfg
+   ensure ox_lib
+   ensure oxmysql
+   ensure es_extended
+   ensure illenium-appearance   # preferred; or esx_skin + skinchanger
+   ensure [w2f]
+   ensure w2f-multicharacter
+   ```
+
+5. `sql/install.sql` is **not** required on ESX — es_extended's own `users` table is used for characters, skins (`users.skin`), and positions. Only the optional `w2f_multicharacter_log` audit table applies if you enable `Config.CharacterCreation.auditLog`.
+
+### ESX notes & limitations
+
+- **Appearance**: illenium-appearance (ESX backend) gives the full experience including dressed lineup preview peds. With only esx_skin/skinchanger, creation and spawning work, but lineup preview peds fall back to default freemode models (skinchanger can only apply skins to the local player ped).
+- **Starter apartments** (`directToApartment`) are Qbox-only (`qbx_properties`). On ESX, creation automatically uses the standalone appearance-editor → spawn-picker pipeline.
+- **Starting money** comes from es_extended's `StartingAccountMoney` config; Qbox starter items are not given on ESX.
+- **Deleting a character** wipes the tables listed in `Config.ESX.characterDataTables` (users, owned_vehicles, addon_account_data, datastore_data, billing by default) — extend that list to match your server's addons.
+- New-character identity height defaults to `Config.ESX.defaultHeight` (the creation form doesn't collect height).
+
 ## Optional config
 
 | Setting | File | Purpose |
 |---------|------|---------|
+| `Config.Framework` | `config.lua` | `'auto'`, `'qbox'`, `'qbcore'`, or `'esx'` |
+| `Config.ESX` | `config.lua` | ESX-only options (default height, delete-cascade tables) |
 | `Config.General.MaxCharacters` | `config.lua` | Character slots per player (match `Config.Scene.pedSlots`) |
 | `Config.Spawns` | `config.lua` | Spawn locations in the sky picker |
 | `Config.CharacterCreation` | `config.lua` | Name/DOB limits, apartment vs spawn-picker flow |

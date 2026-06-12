@@ -3,6 +3,35 @@ Config = {}
 Config.Framework = Config.Framework or 'auto'
 -- valid values: 'auto', 'qbox', 'qbcore', 'esx'
 
+-----------------------------------------------------------------------------
+--- ESX (es_extended legacy) integration.
+---
+--- Active when Config.Framework = 'esx', or when 'auto' detects es_extended.
+--- REQUIREMENTS:
+---   * es_extended running in multichar mode: add `setr esx:multichar true`
+---     to server.cfg (the same mode esx_multicharacter uses). Characters are
+---     stored as `users` rows with `char<slot>:<license>` identifiers.
+---   * esx_multicharacter must NOT be running alongside this resource.
+---   * Appearance: illenium-appearance (preferred) or esx_skin/skinchanger.
+---     Skins persist in `users`.`skin` either way.
+--- Apartments/starter-items are Qbox-only; ESX creation uses the standalone
+--- appearance-editor -> spawn-picker pipeline automatically.
+-----------------------------------------------------------------------------
+Config.ESX = {
+    --- Height (cm) stored on new characters (ESX identity field this
+    --- resource's creation form doesn't collect).
+    defaultHeight = 175,
+    --- Tables wiped when an ESX character is deleted. Each entry is
+    --- { tableName, identifierColumn }; tables that don't exist are skipped.
+    characterDataTables = {
+        { 'users', 'identifier' },
+        { 'owned_vehicles', 'owner' },
+        { 'addon_account_data', 'owner' },
+        { 'datastore_data', 'owner' },
+        { 'billing', 'identifier' },
+    },
+}
+
 Config.General = {
     Debug = false,
     --- Should match the number of scene ped slots (visual lineup positions).

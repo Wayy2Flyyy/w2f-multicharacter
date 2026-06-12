@@ -87,16 +87,20 @@ local function resolveModel(character)
         return W2F.State.modelCache[cid], W2F.State.appearanceCache[cid]
     end
 
-    if character and character.citizenid and W2F.Qbox.IsActive() then
-        local qbxModel, qbxAppearance = W2F.Qbox.GetPreviewPedData(character.citizenid)
-        if qbxModel then
-            model = qbxModel
-            appearance = qbxAppearance
+    if character and character.citizenid then
+        --- GetPreviewPedData routes to qbx_core's callback on Qbox and to this
+        --- resource's generic callback on ESX / qb-core.
+        local savedModel, savedAppearance = W2F.Qbox.GetPreviewPedData(character.citizenid)
+        if savedModel then
+            model = savedModel
         end
-    elseif character and character.citizenid then
-        local skin = lib.callback.await('w2f-multicharacter:server:getAppearance', false, character.citizenid)
-        if skin then
-            appearance = skin
+        if savedAppearance then
+            appearance = savedAppearance
+        else
+            local skin = lib.callback.await('w2f-multicharacter:server:getAppearance', false, character.citizenid)
+            if skin then
+                appearance = skin
+            end
         end
     end
 
