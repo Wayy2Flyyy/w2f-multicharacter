@@ -721,6 +721,23 @@ lib.callback.register('w2f-multicharacter:server:createCharacter', function(sour
             }
             local loginEsxOk, xPlayer = W2F.ESX.Login(source, cid, identity)
             if not loginEsxOk then
+                --- `xPlayer` holds the failure reason string here, not a player.
+                --- Surface it unconditionally — a silent "Failed to create
+                --- character" with nothing in the console is impossible to
+                --- diagnose, and ESX creation has several environmental failure
+                --- modes (es_extended not in multichar mode, missing `users`
+                --- columns, jobs not yet loaded) that all look identical client-side.
+                local reason = tostring(xPlayer or 'unknown')
+                print(('^1[w2f-multicharacter] ESX createCharacter failed src=%s cid=%s reason=%s^0'):format(
+                    tostring(source), tostring(cid), reason))
+                if reason == 'multichar_disabled' then
+                    print('^3[w2f-multicharacter] es_extended is not in multichar mode. '
+                        .. 'Add `setr esx:multichar true` to server.cfg and make sure esx_multicharacter is NOT running.^0')
+                elseif reason == 'login_timeout' then
+                    print('^3[w2f-multicharacter] es_extended did not create the character within the timeout. '
+                        .. 'Check the console above for an oxmysql INSERT error and verify your `users` table '
+                        .. 'matches your es_extended version.^0')
+                end
                 createdOk, createdErr = false, 'Failed to create character.'
                 return
             end
@@ -1327,7 +1344,16 @@ lib.callback.register('w2f-multicharacter:server:loadCharacter', function(source
         if not W2F.ESX.Logout(source) then return false end
     end
 
-    local ok = W2F.ESX.Login(source, slot, nil)
+    local ok, reason = W2F.ESX.Login(source, slot, nil)
+    if not ok then
+        local why = tostring(reason or 'unknown')
+        print(('^1[w2f-multicharacter] ESX loadCharacter failed src=%s identifier=%s reason=%s^0'):format(
+            tostring(source), tostring(citizenid), why))
+        if why == 'multichar_disabled' then
+            print('^3[w2f-multicharacter] es_extended is not in multichar mode. '
+                .. 'Add `setr esx:multichar true` to server.cfg and make sure esx_multicharacter is NOT running.^0')
+        end
+    end
     return ok == true
 end)
 

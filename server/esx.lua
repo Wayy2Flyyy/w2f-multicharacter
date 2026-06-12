@@ -139,6 +139,14 @@ function W2F.ESX.Login(source, slot, identity, timeoutMs)
     if not esx then return false, 'no_core' end
     if esx.GetPlayerFromId(source) then return false, 'already_logged_in' end
 
+    --- es_extended only registers the `esx:onPlayerJoined` create/load handler
+    --- when multichar mode is on. Without it our TriggerEvent below never logs
+    --- the player in and we'd spin until `login_timeout`, so fail fast with a
+    --- reason the caller can act on.
+    if GetConvar('esx:multichar', 'false') ~= 'true' then
+        return false, 'multichar_disabled'
+    end
+
     TriggerEvent('esx:onPlayerJoined', source, ('char%d'):format(slot), identity)
 
     local deadline = GetGameTimer() + (timeoutMs or 10000)
