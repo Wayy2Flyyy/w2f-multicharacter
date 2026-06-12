@@ -93,7 +93,7 @@ end
 function W2F.Nui.BuildSelectionPayload()
     local createCfg = Config.CharacterCreation or {}
     return {
-        maxSlots = #Config.Scene.pedSlots,
+        maxSlots = Config.GetMaxCharacterSlots(),
         showControlHints = Config.UI.showControlHints,
         canCreate = createCfg.enabled ~= false,
         createConfig = {

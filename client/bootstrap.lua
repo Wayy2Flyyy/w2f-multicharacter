@@ -287,7 +287,7 @@ RegisterNUICallback('nuiReady', function(_, cb)
         local payload = (W2F.Nui and W2F.Nui.BuildSelectionPayload)
             and W2F.Nui.BuildSelectionPayload()
             or {
-                maxSlots = #Config.Scene.pedSlots,
+                maxSlots = Config.GetMaxCharacterSlots(),
                 showControlHints = Config.UI.showControlHints,
             }
         W2F.SendNui('showSelection', payload)

@@ -137,7 +137,7 @@ ESX Legacy is supported as an alternative framework. Characters are stored the s
 |---------|------|---------|
 | `Config.Framework` | `config.lua` | `'auto'`, `'qbox'`, `'qbcore'`, or `'esx'` |
 | `Config.ESX` | `config.lua` | ESX-only options (default height, delete-cascade tables) |
-| `Config.General.MaxCharacters` | `config.lua` | Character slots per player (match `Config.Scene.pedSlots`) |
+| `Config.General.MaxCharacters` | `config.lua` | Character slots per player — the single limit (client + server). Set to `1` for one character. Capped by `#Config.Scene.pedSlots`; add ped slots to allow more than 3. On ESX this controls the count, **not** the `esx:multichar` convar. |
 | `Config.Spawns` | `config.lua` | Spawn locations in the sky picker |
 | `Config.CharacterCreation` | `config.lua` | Name/DOB limits, apartment vs spawn-picker flow |
 | `Config.Debug` | `config.lua` | Dev commands (`/w2fmc_open`, `/w2fmc_state`, etc.) |

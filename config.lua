@@ -34,7 +34,12 @@ Config.ESX = {
 
 Config.General = {
     Debug = false,
-    --- Should match the number of scene ped slots (visual lineup positions).
+    --- Maximum characters per player. THE single knob for the slot limit:
+    --- enforced on the server (creation is rejected past it) AND on the client
+    --- (only this many lineup slots are createable). Set to 1 for a single-
+    --- character server. Values above `#Config.Scene.pedSlots` are capped to it,
+    --- so to allow MORE than 3 also add matching entries to `Config.Scene.pedSlots`.
+    --- Framework-agnostic — ESX's `esx:multichar` convar does NOT set this.
     MaxCharacters = 3,
     DefaultSlots = 3,
     --- MLO lineup interiors stream in bucket 0. Isolated per-player buckets
@@ -662,6 +667,23 @@ Config.Spawns = {
 Config.UseQbox = (Config.Framework == "auto" or Config.Framework == "qbox")
 Config.MaxCharacters = Config.General.MaxCharacters
 
+--- Authoritative character-slot count, shared by the client (how many lineup
+--- slots are createable) and the server (creation enforcement). This is the
+--- single knob: set `Config.General.MaxCharacters`. It is capped by the number
+--- of staged scene ped poses (`Config.Scene.pedSlots`), since the lineup can
+--- only render that many positions — raise both to allow more than 3.
+--- Framework-agnostic: applies identically on Qbox, QBCore and ESX (ESX's own
+--- `esx:multichar` convar only toggles multichar mode, it does NOT set the
+--- slot count — this does).
+function Config.GetMaxCharacterSlots()
+    local sceneSlots = (Config.Scene and Config.Scene.pedSlots and #Config.Scene.pedSlots) or 0
+    local configured = Config.MaxCharacters or (Config.General and Config.General.MaxCharacters) or sceneSlots
+    if sceneSlots > 0 and configured > sceneSlots then
+        return sceneSlots
+    end
+    return configured > 0 and configured or 3
+end
+
 Config.Spawn = {
     skySpawnEnabled = true,
     allowedSpawnPoints = { 'last', 'police', 'public', 'hospital' },
@@ -740,15 +762,19 @@ function Config.GetSceneFocal()
         return vec3(0.0, 0.0, 0.0)
     end
 
+    --- Frame only the slots that are actually rendered (1..max) so reducing
+    --- Config.General.MaxCharacters keeps the lineup centered.
+    local count = math.min(#slots, Config.GetMaxCharacterSlots())
+    if count < 1 then count = #slots end
+
     local sumX, sumY, sumZ = 0.0, 0.0, 0.0
-    for i = 1, #slots do
+    for i = 1, count do
         local c = Config.GetSlotCoords(slots[i])
         sumX = sumX + c.x
         sumY = sumY + c.y
         sumZ = sumZ + c.z
     end
 
-    local count = #slots
     return vec3(
         sumX / count,
         sumY / count,
@@ -766,9 +792,15 @@ function Config.GetRecommendedCameraDistance()
         return c.defaultDistance
     end
 
+    --- Only the rendered slots (1..max) contribute to the lineup span.
+    local count = math.min(#slots, Config.GetMaxCharacterSlots())
+    if count < 2 then
+        return c.defaultDistance
+    end
+
     local minX, maxX = math.huge, -math.huge
     local minY, maxY = math.huge, -math.huge
-    for i = 1, #slots do
+    for i = 1, count do
         local sc = Config.GetSlotCoords(slots[i])
         if sc.x < minX then minX = sc.x end
         if sc.x > maxX then maxX = sc.x end

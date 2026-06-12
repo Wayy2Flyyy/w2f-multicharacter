@@ -23,7 +23,7 @@ function W2F.Qbox.FetchCharacters()
     local list = {}
 
     if characters then
-        local maxSlots = amount or Config.MaxCharacters or #Config.Scene.pedSlots
+        local maxSlots = amount or Config.GetMaxCharacterSlots()
         for i = 1, maxSlots do
             if characters[i] then
                 list[i] = characters[i]

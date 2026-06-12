@@ -295,13 +295,10 @@ local function isValidDate(yyyy, mm, dd)
     return true
 end
 
+--- Single source of truth lives in config.lua (shared) so the client lineup
+--- and this server-side enforcement can never disagree.
 local function getMaxCharacterSlots()
-    local sceneSlots = Config.Scene and Config.Scene.pedSlots and #Config.Scene.pedSlots or 0
-    local configured = Config.MaxCharacters or Config.General.MaxCharacters or sceneSlots
-    if sceneSlots > 0 and configured > sceneSlots then
-        return sceneSlots
-    end
-    return configured > 0 and configured or 3
+    return Config.GetMaxCharacterSlots()
 end
 
 local function findNextAvailableCid(characters, maxSlots)

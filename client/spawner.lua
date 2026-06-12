@@ -407,7 +407,7 @@ local function pushSkyPickerNui()
     if W2F.Nui and W2F.Nui.Send then
         W2F.Nui.Send('showSelection', W2F.Nui.BuildSelectionPayload())
     else
-        W2F.SendNui('showSelection', { maxSlots = #Config.Scene.pedSlots })
+        W2F.SendNui('showSelection', { maxSlots = Config.GetMaxCharacterSlots() })
     end
     W2F.SendNui('hideCharacterDetails', {})
     W2F.SendNui('hideSelectionHints', {})

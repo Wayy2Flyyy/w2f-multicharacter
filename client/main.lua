@@ -281,7 +281,7 @@ function W2F.EnterSelection(reason)
         local payload = (W2F.Nui and W2F.Nui.BuildSelectionPayload)
             and W2F.Nui.BuildSelectionPayload()
             or {
-                maxSlots = #Config.Scene.pedSlots,
+                maxSlots = Config.GetMaxCharacterSlots(),
                 showControlHints = Config.UI.showControlHints,
             }
         W2F.SendNui('showSelection', payload)
@@ -554,7 +554,7 @@ local function debugReloadScene()
     W2F.SetSelectionFocus(true, true)
     local payload = (W2F.Nui and W2F.Nui.BuildSelectionPayload)
         and W2F.Nui.BuildSelectionPayload()
-        or { maxSlots = #Config.Scene.pedSlots, showControlHints = Config.UI.showControlHints }
+        or { maxSlots = Config.GetMaxCharacterSlots(), showControlHints = Config.UI.showControlHints }
     W2F.SendNui('showSelection', payload)
     W2F.SendNui('hideCharacterDetails', {})
     W2F.SendNui('hideSkySpawnOptions', {})

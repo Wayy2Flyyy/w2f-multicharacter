@@ -517,7 +517,7 @@ function W2F.Characters.SpawnEmptySlotPed(slotIndex)
 end
 
 function W2F.Characters.GetNextAvailableVisualSlot()
-    for i = 1, #Config.Scene.pedSlots do
+    for i = 1, Config.GetMaxCharacterSlots() do
         local entry = W2F.State.previewPeds[i]
         if entry and entry.isEmpty then
             return i
@@ -786,7 +786,7 @@ end
 --- Assigns each character to a visual ped slot. After creation, the new
 --- character is forced into `pendingVisualSlot` (the slot the player clicked).
 local function buildVisualAssignments(characters)
-    local maxVisual = #Config.Scene.pedSlots
+    local maxVisual = Config.GetMaxCharacterSlots()
     local assignments = {}
     for i = 1, maxVisual do
         assignments[i] = nil
@@ -905,7 +905,7 @@ function W2F.Characters.BuildLineup(characters)
     applySceneLighting('neutral')
 
     local assignments = buildVisualAssignments(characters)
-    local maxVisual = #Config.Scene.pedSlots
+    local maxVisual = Config.GetMaxCharacterSlots()
     for i = 1, maxVisual do
         if assignments[i] then
             W2F.Characters.SpawnPreviewPed(i, assignments[i])
