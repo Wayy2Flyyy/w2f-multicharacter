@@ -34,6 +34,7 @@ client_scripts {
     'client/cleanup.lua',
     'client/bootstrap.lua',
     'client/framework.lua',
+    'client/esx.lua',
     'client/qbox.lua',
     'client/camera.lua',
     'client/characters.lua',
@@ -49,6 +50,7 @@ client_scripts {
 server_scripts {
     '@oxmysql/lib/MySQL.lua',
     'server/framework.lua',
+    'server/esx.lua',
     'server/database.lua',
     'server/main.lua',
 }
@@ -62,9 +64,12 @@ files {
 }
 
 -- Runtime integration notes:
---   qbx_core is required when Config.UseQbox is enabled.
---   illenium-appearance is preferred for character customization.
---   qbx_properties is optional; without it, creation uses the legacy appearance flow.
+--   Framework: qbx_core (default), or es_extended with `setr esx:multichar true`
+--   (set Config.Framework = 'esx' or leave 'auto'). qb-core is partially supported.
+--   illenium-appearance is preferred for character customization on every
+--   framework; esx_skin/skinchanger work as the ESX fallback.
+--   qbx_properties is optional and Qbox-only; without it, creation uses the
+--   standalone appearance flow.
 dependencies {
     'ox_lib',
     'oxmysql',

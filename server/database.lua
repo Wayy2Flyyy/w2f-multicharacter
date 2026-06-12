@@ -8,10 +8,24 @@ local REQUIRED_TABLES = {
     'player_outfits',
 }
 
+--- ESX servers only need `users` (created by es_extended's own install;
+--- skins live in users.skin). The QB-family list comes from sql/install.sql.
+local ESX_REQUIRED_TABLES = {
+    'users',
+}
+
+local function getRequiredTables()
+    if W2F.Framework and W2F.Framework.IsESX and W2F.Framework.IsESX() then
+        return ESX_REQUIRED_TABLES
+    end
+    return REQUIRED_TABLES
+end
+
 function W2F.Database.Verify()
+    local required = getRequiredTables()
     local missing = {}
-    for i = 1, #REQUIRED_TABLES do
-        local name = REQUIRED_TABLES[i]
+    for i = 1, #required do
+        local name = required[i]
         local row = MySQL.single.await(
             'SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? LIMIT 1',
             { name }
@@ -47,5 +61,13 @@ end
 
 CreateThread(function()
     MySQL.ready.await()
+    --- With Config.Framework = 'auto', the framework core may start after this
+    --- resource; give detection a moment so we verify the right table set.
+    local deadline = GetGameTimer() + 10000
+    while W2F.Framework and W2F.Framework.Detect
+        and W2F.Framework.Detect() == 'unknown'
+        and GetGameTimer() < deadline do
+        Wait(500)
+    end
     W2F.Database.Verify()
 end)

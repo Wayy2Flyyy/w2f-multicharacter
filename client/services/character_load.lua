@@ -42,6 +42,17 @@ local function recordSpan(name, started)
 end
 
 local function getPlayerData()
+    if W2F.ESX and W2F.ESX.IsActive and W2F.ESX.IsActive() then
+        if not W2F.ESX.IsLoggedIn() then return nil end
+        local data = W2F.ESX.GetPlayerData()
+        local identifier = data and data.identifier
+        if identifier and identifier ~= '' then
+            --- Adapt to the qbx shape the load loop polls (`citizenid`).
+            --- The ESX identifier IS the citizenid in this resource.
+            return { citizenid = identifier }
+        end
+        return nil
+    end
     if QBX and QBX.PlayerData and QBX.PlayerData.citizenid then
         return QBX.PlayerData
     end
@@ -105,6 +116,15 @@ local function loadAppearance(ped, citizenid, appearance)
         return true
     end
 
+    --- ESX fallback: skinchanger applies esx_skin-format skins to the local
+    --- player ped (only reached when illenium/fivem-appearance aren't running).
+    if GetResourceState('skinchanger') == 'started' and appearance then
+        pcall(function()
+            TriggerEvent('skinchanger:loadSkin', appearance)
+        end)
+        return true
+    end
+
     if citizenid then
         local ok, saved = awaitWithTimeout('w2f-multicharacter:server:getAppearance', 3500, citizenid)
         if ok and saved and GetResourceState('illenium-appearance') == 'started' then
@@ -121,7 +141,7 @@ end
 --- Loads `citizenid` and places the resulting ped at `coords` (vector4).
 ---
 --- Returns (true, nil, ped) on success or (false, reason) on failure.
---- `reason` is one of: `no_qbox`, `server_timeout`, `server_denied`,
+--- `reason` is one of: `no_framework_core`, `server_timeout`, `server_denied`,
 --- `playerdata_timeout`, `model_load_failed`, `model_swap_timeout`,
 --- `appearance_failed`, `collision_timeout`.
 function W2F.CharacterLoad.Load(opts)
@@ -138,8 +158,9 @@ function W2F.CharacterLoad.Load(opts)
         return fail('missing_args')
     end
 
-    if not (W2F.Qbox and W2F.Qbox.IsActive and W2F.Qbox.IsActive()) then
-        return fail('no_qbox')
+    local esxMode = W2F.ESX and W2F.ESX.IsActive and W2F.ESX.IsActive()
+    if not esxMode and not (W2F.Qbox and W2F.Qbox.IsActive and W2F.Qbox.IsActive()) then
+        return fail('no_framework_core')
     end
 
     local timeouts = opts.timeouts or {}
@@ -159,7 +180,12 @@ function W2F.CharacterLoad.Load(opts)
             recordSpan('charload.server_load', tnow())
         else
             local stepStarted = tnow()
-            local done, success = awaitWithTimeout('qbx_core:server:loadCharacter', t.serverLoad, citizenid)
+            --- ESX has no core-provided login callback; this resource's own
+            --- server:loadCharacter triggers esx:onPlayerJoined for the slot.
+            local loginCallback = esxMode
+                and 'w2f-multicharacter:server:loadCharacter'
+                or 'qbx_core:server:loadCharacter'
+            local done, success = awaitWithTimeout(loginCallback, t.serverLoad, citizenid)
             if not done then
                 recordSpan('charload.server_load', stepStarted)
                 return fail('server_timeout')

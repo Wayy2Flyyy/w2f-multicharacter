@@ -38,14 +38,21 @@ function W2F.Qbox.FetchCharacters()
     return safeAwait('w2f-multicharacter:server:getCharacters') or {}
 end
 
----@return number? modelHash
+---@return number|string? model
 ---@return table? appearance
 function W2F.Qbox.GetPreviewPedData(citizenid)
-    if not citizenid or not W2F.Qbox.IsActive() then
+    if not citizenid then
         return nil, nil
     end
 
-    local clothing, model = lib.callback.await('qbx_core:server:getPreviewPedData', false, citizenid)
+    --- qbx_core has its own preview callback; every other framework (ESX,
+    --- qb-core) goes through this resource's generic one, which returns the
+    --- same (clothing, model) pair.
+    local callbackName = W2F.Qbox.IsActive()
+        and 'qbx_core:server:getPreviewPedData'
+        or 'w2f-multicharacter:server:getPreviewPedData'
+
+    local clothing, model = lib.callback.await(callbackName, false, citizenid)
     if not model then
         return nil, nil
     end

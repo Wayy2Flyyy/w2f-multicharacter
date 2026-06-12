@@ -381,7 +381,7 @@ RegisterNetEvent('w2f-multicharacter:client:openSelection', function()
     end
 end)
 
-RegisterNetEvent('qbx_core:client:playerLoggedOut', function()
+local function onFrameworkLogout()
     if W2F.Creator and W2F.Creator.suppressAutoOpen then return end
     if W2F.Spawner and W2F.Spawner.IsSpawnCooldownActive and W2F.Spawner.IsSpawnCooldownActive() then
         return
@@ -398,7 +398,12 @@ RegisterNetEvent('qbx_core:client:playerLoggedOut', function()
     else
         W2F.EnterSelection('logout')
     end
-end)
+end
+
+RegisterNetEvent('qbx_core:client:playerLoggedOut', onFrameworkLogout)
+--- es_extended fires this on the client after esx:playerLogout unloads the
+--- character (character switch / recovery) — reopen the lineup, same as QBX.
+RegisterNetEvent('esx:onPlayerLogout', onFrameworkLogout)
 
 local function openSelectionOnSessionStart()
     if W2F.Bootstrap and W2F.Bootstrap.OpenSelectionWithRetry then

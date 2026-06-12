@@ -4,6 +4,11 @@
 --
 -- Requires: MariaDB / MySQL 10.3+
 -- Also ensure oxmysql is configured in server.cfg before starting resources.
+--
+-- ESX SERVERS: none of this file is required. es_extended's own install
+-- provides the `users` table (characters + skins) that the ESX mode uses;
+-- only the optional `w2f_multicharacter_log` table at the bottom applies if
+-- you want the creation audit log.
 -- =============================================================================
 
 -- -----------------------------------------------------------------------------

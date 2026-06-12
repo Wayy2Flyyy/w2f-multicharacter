@@ -22,6 +22,14 @@ local function getPlayerLicense(source)
     return GetPlayerIdentifierByType(source, 'license2') or GetPlayerIdentifierByType(source, 'license')
 end
 
+--- ESX runtime gate: Config.Framework resolves to 'esx' (explicitly or via
+--- auto-detection) AND es_extended is actually started. Every framework
+--- branch below funnels through this so the qbox flow is untouched on
+--- QB-family servers.
+local function isEsxMode()
+    return W2F.ESX and W2F.ESX.IsActive and W2F.ESX.IsActive()
+end
+
 local function getPlayerLicenses(source)
     return GetPlayerIdentifierByType(source, 'license'), GetPlayerIdentifierByType(source, 'license2')
 end
@@ -126,6 +134,8 @@ local RATE_LIMITS = {
     getLastLocation    = 150,
     getApartmentOptions= 250,
     resolveSpawnById   = 200,
+    loadCharacter      = 1000,
+    getPreviewPedData  = 150,
     canClaimApartment  = 500,
     --- Dedicated key (not shared with canClaimApartment) so a confirm landing
     --- inside the canClaim window isn't falsely rejected. Bounds the ~25-query
@@ -416,7 +426,15 @@ end
 --- Query all authenticated license identifiers, including equivalent
 --- `license:`/`license2:` variants, so the lineup matches what qbx_core may
 --- have stored in `players.license` during character creation.
-local function fetchCharactersByLicense(license, license2)
+--- `source` is optional and only used by the ESX branch, where the lookup key
+--- must come from es_extended's identifier config (license by default, but
+--- steam on some servers) instead of assuming the FiveM license.
+local function fetchCharactersByLicense(license, license2, source)
+    if isEsxMode() then
+        local hex = source and W2F.ESX.GetBareIdentifier(source) or nil
+        return W2F.ESX.FetchCharacters(hex or license, license2)
+    end
+
     local identifiers = getLicenseIdentifierSet(license, license2)
     local licenseWhere = buildLicenseWhere(identifiers)
     if not licenseWhere then return {} end
@@ -465,6 +483,24 @@ end
 --- prefix formats don't reject the rightful owner.
 local function ownsCitizenid(src, citizenid)
     if not citizenid or citizenid == '' then return false end
+
+    if isEsxMode() then
+        --- ESX 'citizenid' is the full prefixed identifier (char<slot>:<hex>);
+        --- ownership is the license suffix matching the caller's license.
+        local owned = W2F.ESX.OwnsIdentifier(src, citizenid)
+        if Config.Debug then
+            print(('[w2f-multicharacter] ownsCitizenid(esx) src=%s identifier=%s owned=%s'):format(
+                tostring(src), tostring(citizenid), tostring(owned)))
+        end
+        if not owned and W2F.Database then
+            local license = getPlayerLicense(src)
+            if license then
+                W2F.Database.Log(license, citizenid, 'denied_ownership', nil)
+            end
+        end
+        return owned
+    end
+
     local license, license2 = getPlayerLicenses(src)
     local identifiers = getLicenseIdentifierSet(license, license2)
     local licenseWhere = buildLicenseWhere(identifiers)
@@ -525,7 +561,7 @@ lib.callback.register('w2f-multicharacter:server:getCharacters', function(source
     if not rateLimit(source, 'getCharacters') then return {} end
     local license, license2 = getPlayerLicenses(source)
     if not license and not license2 then return {} end
-    return fetchCharactersByLicense(license, license2)
+    return fetchCharactersByLicense(license, license2, source)
 end)
 
 lib.callback.register('w2f-multicharacter:server:getSlotSummary', function(source)
@@ -537,7 +573,7 @@ lib.callback.register('w2f-multicharacter:server:getSlotSummary', function(sourc
         return { maxSlots = 0, used = 0, slots = {} }
     end
 
-    local characters = fetchCharactersByLicense(license, license2)
+    local characters = fetchCharactersByLicense(license, license2, source)
     local maxSlots = getMaxCharacterSlots()
     local ordered = {}
     for cid = 1, maxSlots do
@@ -638,11 +674,16 @@ lib.callback.register('w2f-multicharacter:server:createCharacter', function(sour
         return false, result
     end
 
-    if not (Config.UseQbox and GetResourceState('qbx_core') == 'started') then
-        return false, 'Qbox core is required for character creation.'
+    local esxMode = isEsxMode()
+    if not esxMode and not (Config.UseQbox and GetResourceState('qbx_core') == 'started') then
+        return false, 'A supported framework core (qbx_core or es_extended) is required for character creation.'
     end
 
-    if exports.qbx_core:GetPlayer(source) then
+    if esxMode then
+        if W2F.ESX.GetPlayer(source) then
+            return false, 'Already logged into a character.'
+        end
+    elseif exports.qbx_core:GetPlayer(source) then
         return false, 'Already logged into a character.'
     end
 
@@ -654,7 +695,7 @@ lib.callback.register('w2f-multicharacter:server:createCharacter', function(sour
 
     local createdOk, createdErr, createdMeta
     local runOk, runErr = pcall(withLicenseLock, primaryLicense, 5, function(_locked)
-        local characters = fetchCharactersByLicense(license, license2)
+        local characters = fetchCharactersByLicense(license, license2, source)
         local maxSlots = getMaxCharacterSlots()
         local cid = findNextAvailableCid(characters, maxSlots)
         if not cid then
@@ -663,6 +704,52 @@ lib.callback.register('w2f-multicharacter:server:createCharacter', function(sour
         end
 
         result.cid = cid
+
+        if esxMode then
+            --- ESX path: es_extended's createESXPlayer persists the users row
+            --- itself when esx:onPlayerJoined arrives with identity data (the
+            --- exact flow esx_multicharacter uses). Starting money comes from
+            --- es_extended's StartingAccountMoney config, so no starter-item /
+            --- license-repair handling is needed here.
+            local identity = {
+                firstname = result.firstname,
+                lastname = result.lastname,
+                dateofbirth = result.birthdate,
+                sex = result.gender == 1 and 'f' or 'm',
+                height = (Config.ESX and Config.ESX.defaultHeight) or 175,
+            }
+            local loginEsxOk, xPlayer = W2F.ESX.Login(source, cid, identity)
+            if not loginEsxOk then
+                createdOk, createdErr = false, 'Failed to create character.'
+                return
+            end
+
+            local citizenid = xPlayer and xPlayer.identifier
+            if not citizenid or citizenid == '' then
+                createdOk, createdErr = false, 'Character created but data missing.'
+                return
+            end
+
+            if W2F.Database then
+                W2F.Database.Log(license or license2, citizenid, 'create',
+                    { cid = cid, name = ('%s %s'):format(result.firstname, result.lastname) })
+            end
+
+            local sess = ensureSession(source)
+            sess.selectedCitizenid = citizenid
+            sess.creatingCitizenid = citizenid
+
+            createdOk = true
+            createdMeta = {
+                citizenid = citizenid,
+                cid = cid,
+                gender = result.gender,
+                firstname = result.firstname,
+                lastname = result.lastname,
+            }
+            return
+        end
+
         local loginOk = exports.qbx_core:Login(source, nil, { charinfo = result })
         if not loginOk then
             createdOk, createdErr = false, 'Failed to create character.'
@@ -776,7 +863,11 @@ lib.callback.register('w2f-multicharacter:server:finishCreation', function(sourc
     end
     local license = getPlayerLicense(source)
     local citizenid = nil
-    if Config.UseQbox and GetResourceState('qbx_core') == 'started' then
+    if isEsxMode() then
+        local xPlayer = W2F.ESX.GetPlayer(source)
+        citizenid = xPlayer and xPlayer.identifier
+        W2F.ESX.Logout(source)
+    elseif Config.UseQbox and GetResourceState('qbx_core') == 'started' then
         local player = exports.qbx_core:GetPlayer(source)
         citizenid = player and player.PlayerData.citizenid
         exports.qbx_core:Logout(source)
@@ -837,6 +928,33 @@ lib.callback.register('w2f-multicharacter:server:saveNewCharacterAppearance', fu
     if not rateLimit(source, 'saveNewAppearance') then
         return false, 'rate_limited'
     end
+
+    if isEsxMode() then
+        --- ESX path: skins persist in users.skin (esx_skin and
+        --- illenium-appearance's ESX backend both write there). A nil payload
+        --- runs the verify-only branch — used after esx_skin's own save.
+        local xPlayer = W2F.ESX.GetPlayer(source)
+        local esxCitizenid = xPlayer and xPlayer.identifier
+        if not esxCitizenid or esxCitizenid == '' then
+            return false, 'missing_player'
+        end
+
+        local esxVerifyOnly = appearance == nil
+        if not esxVerifyOnly and type(appearance) ~= 'table' then
+            return false, 'invalid_appearance'
+        end
+        if not esxVerifyOnly and not W2F.ESX.SaveAppearance(esxCitizenid, appearance) then
+            return false, 'insert_failed'
+        end
+        if not W2F.ESX.HasSavedAppearance(esxCitizenid, 5000) then
+            return false, 'verify_failed'
+        end
+        --- Appearance persisted — creation is committed; cancel the disconnect
+        --- rollback for this character.
+        if session[source] then session[source].creatingCitizenid = nil end
+        return true
+    end
+
     if not (Config.UseQbox and GetResourceState('qbx_core') == 'started') then
         return false, 'qbox_unavailable'
     end
@@ -997,6 +1115,27 @@ local function deleteCharacterRows(citizenid)
 end
 
 local function deleteCharacterFully(source, citizenid)
+    if isEsxMode() then
+        local xPlayer = W2F.ESX.GetPlayer(source)
+        if xPlayer and xPlayer.identifier == citizenid then
+            W2F.ESX.Logout(source)
+        end
+
+        local esxCleared = W2F.ESX.DeleteCharacter(citizenid)
+        if esxCleared then
+            --- Out-wait a late es_extended save racing the delete.
+            local esxTimeout = GetGameTimer() + 2500
+            while GetGameTimer() < esxTimeout do
+                local row = MySQL.scalar.await('SELECT 1 FROM users WHERE identifier = ?', { citizenid })
+                if not row then break end
+                Wait(50)
+            end
+        end
+
+        clearSelectedIf(source, citizenid)
+        return esxCleared
+    end
+
     --- If the player is currently logged in as this character, force them out
     --- so qbx doesn't keep stale data after we wipe the row.
     if Config.UseQbox and GetResourceState('qbx_core') == 'started' then
@@ -1053,7 +1192,18 @@ lib.callback.register('w2f-multicharacter:server:cancelCreation', function(sourc
     local license = getPlayerLicense(source)
     local citizenid = nil
 
-    if Config.UseQbox and GetResourceState('qbx_core') == 'started' then
+    if isEsxMode() then
+        local xPlayer = W2F.ESX.GetPlayer(source)
+        citizenid = xPlayer and xPlayer.identifier
+        if citizenid and citizenid ~= '' then
+            --- deleteCharacterFully's ESX branch logs out first, then deletes
+            --- and verifies the row is gone.
+            deleteCharacterFully(source, citizenid)
+        else
+            --- Login may have failed mid-creation; make sure they're out.
+            pcall(function() W2F.ESX.Logout(source) end)
+        end
+    elseif Config.UseQbox and GetResourceState('qbx_core') == 'started' then
         local player = exports.qbx_core:GetPlayer(source)
         citizenid = player and player.PlayerData.citizenid
         if citizenid and citizenid ~= '' then
@@ -1091,7 +1241,9 @@ end)
 --- characters whose spawn merely failed. qbx_core:Logout is a safe no-op when
 --- the source isn't logged in.
 lib.callback.register('w2f-multicharacter:server:logoutForRecovery', function(source)
-    if Config.UseQbox and GetResourceState('qbx_core') == 'started' then
+    if isEsxMode() then
+        pcall(function() W2F.ESX.Logout(source) end)
+    elseif Config.UseQbox and GetResourceState('qbx_core') == 'started' then
         pcall(function() exports.qbx_core:Logout(source) end)
     end
     if session[source] then
@@ -1113,6 +1265,10 @@ lib.callback.register('w2f-multicharacter:server:getAppearance', function(source
     if not citizenid then return nil end
     if not ownsCitizenid(source, citizenid) then return nil end
 
+    if isEsxMode() then
+        return W2F.ESX.GetAppearance(citizenid)
+    end
+
     local row = MySQL.single.await('SELECT skin FROM playerskins WHERE citizenid = ? AND active = 1', { citizenid })
     if row and row.skin then
         return decodeField(row.skin)
@@ -1120,35 +1276,66 @@ lib.callback.register('w2f-multicharacter:server:getAppearance', function(source
     return nil
 end)
 
-lib.callback.register('w2f-multicharacter:server:getLastLocation', function(source, character)
-    if not rateLimit(source, 'getLastLocation') then return nil end
-    if not character then return nil end
+--- Generic preview-ped data (saved model + appearance) for the lineup.
+--- Mirrors qbx_core:server:getPreviewPedData's (clothing, model) return order
+--- so the client adapter can treat both callbacks identically. Used when
+--- qbx_core isn't running (ESX / qb-core).
+lib.callback.register('w2f-multicharacter:server:getPreviewPedData', function(source, citizenid)
+    if not rateLimit(source, 'getPreviewPedData') then return nil end
+    if not citizenid or citizenid == '' then return nil end
+    if not ownsCitizenid(source, citizenid) then return nil end
 
-    local cid = type(character) == 'table' and character.citizenid or nil
-    if not cid then return nil end
-    if not ownsCitizenid(source, cid) then return nil end
-
-    local pos = character.position
-    if type(pos) == 'string' then
-        pos = decodeField(pos)
-    end
-    if pos and pos.x then
-        return { x = pos.x, y = pos.y, z = pos.z, w = pos.w or pos.heading or 0.0 }
+    if isEsxMode() then
+        local model, skin = W2F.ESX.GetPreviewPedData(citizenid)
+        return skin, model
     end
 
-    local row = MySQL.single.await('SELECT position FROM players WHERE citizenid = ?', { cid })
-    if row and row.position then
-        local decoded = decodeField(row.position)
-        if decoded and decoded.x then
-            return { x = decoded.x, y = decoded.y, z = decoded.z, w = decoded.w or decoded.heading or 0.0 }
+    local row = MySQL.single.await(
+        'SELECT model, skin FROM playerskins WHERE citizenid = ? AND active = 1 ORDER BY id DESC LIMIT 1',
+        { citizenid }
+    )
+    if not row then return nil end
+    return decodeField(row.skin), row.model
+end)
+
+--- ESX login for an EXISTING character. QB-family clients use qbx_core's own
+--- `qbx_core:server:loadCharacter` callback; ESX has no equivalent, so the
+--- client CharacterLoad service calls this instead. Logs out any currently
+--- active character first (safe relog), then logs into the requested slot.
+lib.callback.register('w2f-multicharacter:server:loadCharacter', function(source, citizenid)
+    if not rateLimit(source, 'loadCharacter') then return false end
+    if not isEsxMode() then return false end
+    if not ownsCitizenid(source, citizenid) then
+        if Config.Debug then
+            print(('[w2f-multicharacter] loadCharacter denied src=%s identifier=%s'):format(
+                source, tostring(citizenid)))
         end
+        return false
     end
 
-    return nil
+    local slot = W2F.ESX.GetSlotFromIdentifier(citizenid)
+    if not slot then return false end
+
+    local xPlayer = W2F.ESX.GetPlayer(source)
+    if xPlayer then
+        if xPlayer.identifier == citizenid then
+            --- Already logged in as this character (e.g. retry after a
+            --- client-side timeout) — treat as success.
+            return true
+        end
+        if not W2F.ESX.Logout(source) then return false end
+    end
+
+    local ok = W2F.ESX.Login(source, slot, nil)
+    return ok == true
 end)
 
 local function fetchPlayerSavedPosition(citizenid)
     if not citizenid or citizenid == '' then return nil end
+
+    if isEsxMode() then
+        return W2F.ESX.GetSavedPosition(citizenid)
+    end
 
     local row = MySQL.single.await(
         'SELECT position, metadata FROM players WHERE citizenid = ? LIMIT 1',
@@ -1175,6 +1362,25 @@ local function fetchPlayerSavedPosition(citizenid)
 
     return nil
 end
+
+lib.callback.register('w2f-multicharacter:server:getLastLocation', function(source, character)
+    if not rateLimit(source, 'getLastLocation') then return nil end
+    if not character then return nil end
+
+    local cid = type(character) == 'table' and character.citizenid or nil
+    if not cid then return nil end
+    if not ownsCitizenid(source, cid) then return nil end
+
+    local pos = character.position
+    if type(pos) == 'string' then
+        pos = decodeField(pos)
+    end
+    if pos and pos.x then
+        return { x = pos.x, y = pos.y, z = pos.z, w = pos.w or pos.heading or 0.0 }
+    end
+
+    return fetchPlayerSavedPosition(cid)
+end)
 
 local function resolveSpawnById(spawnId, citizenid)
     if type(spawnId) ~= 'string' or spawnId == '' then
@@ -1454,6 +1660,14 @@ end)
 --- Clear the selection when QBX logs the player out so a stale
 --- selectedCitizenid can't bleed across sessions.
 AddEventHandler('qbx_core:server:onLogout', function(source)
+    if session[source] then
+        session[source].selectedCitizenid = nil
+    end
+end)
+
+--- ESX equivalent: es_extended handles this same event for the actual
+--- save + unload; this handler only clears our session selection.
+AddEventHandler('esx:playerLogout', function(source)
     if session[source] then
         session[source].selectedCitizenid = nil
     end

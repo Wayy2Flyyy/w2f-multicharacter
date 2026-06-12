@@ -28,6 +28,9 @@ local function dbg(...)
 end
 
 function W2F.Bootstrap.IsLoggedIn()
+    if W2F.ESX and W2F.ESX.IsActive and W2F.ESX.IsActive() then
+        return W2F.ESX.IsLoggedIn()
+    end
     if QBX and QBX.PlayerData and QBX.PlayerData.citizenid then
         return true
     end
@@ -40,6 +43,24 @@ function W2F.Bootstrap.IsLoggedIn()
         end
     end
     return false
+end
+
+--- Which framework core resource has to be up before we can boot. With
+--- Config.Framework = 'auto' this accepts whichever supported core starts
+--- first (previously the boot loop hard-required qbx_core, which dead-locked
+--- ESX servers left on 'auto').
+local function frameworkCoreState()
+    local fw = Config.Framework or 'auto'
+    if type(fw) == 'string' then fw = fw:lower() end
+
+    if fw == 'qbox' then return 'qbx_core', GetResourceState('qbx_core') end
+    if fw == 'qbcore' then return 'qb-core', GetResourceState('qb-core') end
+    if fw == 'esx' then return 'es_extended', GetResourceState('es_extended') end
+
+    if GetResourceState('qbx_core') == 'started' then return 'qbx_core', 'started' end
+    if GetResourceState('qb-core') == 'started' then return 'qb-core', 'started' end
+    if GetResourceState('es_extended') == 'started' then return 'es_extended', 'started' end
+    return 'auto', 'missing'
 end
 
 --- Bounded callback: lib.callback.await blocks indefinitely if the server
@@ -62,7 +83,7 @@ local function isReadyWithTimeout(timeoutMs)
     return done and result == true
 end
 
---- Blocks until qbx_core + server DB are ready (or timeout).
+--- Blocks until the framework core + server DB are ready (or timeout).
 function W2F.Bootstrap.WaitForReady()
     local cfg = startupCfg()
     local timeout = GetGameTimer() + (cfg.dependencyTimeoutMs or 45000)
@@ -71,14 +92,14 @@ function W2F.Bootstrap.WaitForReady()
     --- Diagnostic prints so a stuck boot is observable on the F8 console without
     --- having to toggle Config.Debug.
     local lastReport = 0
-    local lastOxLib, lastQbx, lastReady = nil, nil, nil
+    local lastOxLib, lastCore, lastReady = nil, nil, nil
 
     while GetGameTimer() < timeout do
         local oxLib = GetResourceState('ox_lib')
-        local qbx = GetResourceState('qbx_core')
+        local coreName, coreState = frameworkCoreState()
         local oxLibUp = oxLib == 'started'
-        local qbxUp = (not Config.UseQbox) or qbx == 'started'
-        local depsUp = oxLibUp and qbxUp
+        local coreUp = coreState == 'started'
+        local depsUp = oxLibUp and coreUp
 
         local ready = false
         if depsUp then
@@ -89,19 +110,20 @@ function W2F.Bootstrap.WaitForReady()
         --- Print state change OR every 4s while waiting so the user can see
         --- exactly which dep is blocking the boot.
         local now = GetGameTimer()
-        if oxLib ~= lastOxLib or qbx ~= lastQbx or ready ~= lastReady or (now - lastReport) >= 4000 then
-            print(('[w2f-multicharacter][boot] WaitForReady waited=%dms ox_lib=%s qbx_core=%s serverReady=%s')
-                :format(now - started, oxLib, qbx, tostring(ready)))
-            lastOxLib, lastQbx, lastReady = oxLib, qbx, ready
+        if oxLib ~= lastOxLib or coreState ~= lastCore or ready ~= lastReady or (now - lastReport) >= 4000 then
+            print(('[w2f-multicharacter][boot] WaitForReady waited=%dms ox_lib=%s core=%s(%s) serverReady=%s')
+                :format(now - started, oxLib, coreName, coreState, tostring(ready)))
+            lastOxLib, lastCore, lastReady = oxLib, coreState, ready
             lastReport = now
         end
 
         Wait(400)
     end
 
-    print(('[w2f-multicharacter][boot] WaitForReady TIMED OUT after %dms (ox_lib=%s qbx_core=%s)')
+    local coreName, coreState = frameworkCoreState()
+    print(('[w2f-multicharacter][boot] WaitForReady TIMED OUT after %dms (ox_lib=%s core=%s(%s))')
         :format(GetGameTimer() - started,
-            GetResourceState('ox_lib'), GetResourceState('qbx_core')))
+            GetResourceState('ox_lib'), coreName, coreState))
     dbg('Bootstrap.WaitForReady timed out')
     return false
 end

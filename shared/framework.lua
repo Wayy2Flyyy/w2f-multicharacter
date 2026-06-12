@@ -12,13 +12,19 @@ local function resolveConfigured()
     return configured
 end
 
+local warnedNoFramework = false
+
 function W2F.Framework.Detect()
     local configured = resolveConfigured()
     if configured ~= 'auto' then return configured end
     if GetResourceState('qbx_core') == 'started' then return 'qbox' end
     if GetResourceState('qb-core') == 'started' then return 'qbcore' end
     if GetResourceState('es_extended') == 'started' then return 'esx' end
-    print('^1[w2f-multicharacter] No supported framework detected (qbx_core/qb-core/es_extended).^0')
+    --- Detect() is polled from boot loops; warn once, not every call.
+    if not warnedNoFramework then
+        warnedNoFramework = true
+        print('^1[w2f-multicharacter] No supported framework detected (qbx_core/qb-core/es_extended).^0')
+    end
     return 'unknown'
 end
 

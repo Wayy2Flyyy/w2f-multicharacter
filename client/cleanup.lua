@@ -33,6 +33,13 @@ end
 --- that entire file is skipped when useExternalCharacters = true, so we
 --- must replicate the sequence here after loading a character.
 function W2F.Cleanup.FirePlayerLoadedEvents()
+    --- ESX: es_extended fires `esx:playerLoaded` (client + server) itself as
+    --- part of the esx:onPlayerJoined login, so every ESX resource is already
+    --- initialized — replaying QB events here would just be noise.
+    if W2F.ESX and W2F.ESX.IsActive and W2F.ESX.IsActive() then
+        return
+    end
+
     --- Server-side: sets Player(source).state.isLoggedIn = true and
     --- triggers every server handler listening for this event.
     TriggerServerEvent('QBCore:Server:OnPlayerLoaded')
