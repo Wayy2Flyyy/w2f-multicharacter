@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>W2F Character Selection</title>
+    <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+    <div id="app" class="app hidden">
+
+        <div id="vignette" class="vignette" aria-hidden="true"></div>
+        <div id="bgGrid" class="bg-grid" aria-hidden="true"></div>
+
+        <div id="hint" class="hint">
+            <span>Hover Ped</span>
+            <span>Click Select</span>
+            <span>Empty Slot Create</span>
+            <span><kbd>Enter</kbd> Spawn</span>
+            <span><kbd>Del</kbd> Delete</span>
+            <span><kbd>Esc</kbd> Back</span>
+        </div>
+
+        <div id="hologram" class="hologram hidden" aria-live="polite">
+            <div class="holo-cone" aria-hidden="true"></div>
+            <div class="holo-stage">
+                <div class="holo-scan" aria-hidden="true"></div>
+                <div class="holo-noise" aria-hidden="true"></div>
+                <div class="holo-glitch" aria-hidden="true"></div>
+
+                <div class="holo-corners" aria-hidden="true">
+                    <span></span><span></span><span></span><span></span>
+                </div>
+
+                <header class="holo-header">
+                    <div class="holo-meta">
+                        <span class="holo-id">ID</span>
+                        <span id="holoSlot" class="holo-slot">00</span>
+                        <span class="holo-status">
+                            <span class="holo-status-dot"></span>
+                            Active
+                        </span>
+                    </div>
+                    <h1 id="holoName" class="holo-name" data-text="—">—</h1>
+                    <p id="holoJob" class="holo-job">—</p>
+                </header>
+
+                <div class="holo-divider" aria-hidden="true"></div>
+
+                <dl class="holo-stats">
+                    <div>
+                        <dt>Cash</dt>
+                        <dd id="holoCash">—</dd>
+                    </div>
+                    <div>
+                        <dt>Bank</dt>
+                        <dd id="holoBank">—</dd>
+                    </div>
+                    <div>
+                        <dt>Playtime</dt>
+                        <dd id="holoPlaytime">—</dd>
+                    </div>
+                    <div>
+                        <dt>Last Location</dt>
+                        <dd id="holoLocation">—</dd>
+                    </div>
+                </dl>
+
+                <footer class="holo-footer" aria-hidden="true">
+                    <span class="holo-tag">W2F &middot; LIVE FEED</span>
+                    <span class="holo-bars">
+                        <i></i><i></i><i></i><i></i><i></i>
+                    </span>
+                </footer>
+            </div>
+        </div>
+
+        <div id="actionBar" class="action-bar hidden">
+            <button id="spawnBtn" type="button" class="hbtn hbtn-primary">
+                <span class="hbtn-label">Spawn</span>
+                <kbd>Enter</kbd>
+            </button>
+            <button id="deleteBtn" type="button" class="hbtn hbtn-danger">
+                <span class="hbtn-label">Delete</span>
+                <kbd>Del</kbd>
+            </button>
+            <button id="closeDetailsBtn" type="button" class="hbtn hbtn-ghost">
+                <span class="hbtn-label">Back</span>
+                <kbd>Esc</kbd>
+            </button>
+        </div>
+
+        <div id="confirmDelete" class="confirm-overlay hidden" role="dialog" aria-modal="true">
+            <div class="confirm-stage">
+                <div class="confirm-glow" aria-hidden="true"></div>
+                <header class="confirm-head">
+                    <span class="sky-prefix">// W2F</span>
+                    <h2 class="confirm-title">Permanently Delete</h2>
+                </header>
+                <p class="confirm-body">
+                    You are about to delete
+                    <strong id="confirmName">this character</strong>.
+                    All progress, money, and inventory will be lost.
+                </p>
+                <p class="confirm-note" id="confirmNote">Type <kbd>DELETE</kbd> to confirm.</p>
+                <input
+                    type="text"
+                    id="confirmInput"
+                    class="confirm-input"
+                    autocomplete="off"
+                    aria-label="Type DELETE to confirm"
+                    placeholder="Type DELETE"
+                    aria-describedby="confirmNote"
+                />
+                <footer class="confirm-actions">
+                    <button type="button" id="confirmDeleteBtn" class="hbtn hbtn-danger" disabled>
+                        <span class="hbtn-label">Delete Forever</span>
+                    </button>
+                    <button type="button" id="confirmCancelBtn" class="hbtn hbtn-ghost">
+                        <span class="hbtn-label">Cancel</span>
+                        <kbd>Esc</kbd>
+                    </button>
+                </footer>
+            </div>
+        </div>
+
+        <section id="createPanel" class="create-panel hidden" aria-label="Create character">
+            <div class="create-stage">
+                <header class="create-head">
+                    <span class="sky-prefix">// W2F</span>
+                    <h2 class="create-title">New Identity</h2>
+                    <span class="create-slot">Slot <span id="createSlotLabel">01</span></span>
+                </header>
+                <p id="createError" class="create-error hidden" role="alert"></p>
+                <form id="createForm" class="create-form" autocomplete="off">
+                    <label class="create-field">
+                        <span>First name</span>
+                        <input type="text" id="createFirst" name="firstname" maxlength="24" required />
+                    </label>
+                    <label class="create-field">
+                        <span>Last name</span>
+                        <input type="text" id="createLast" name="lastname" maxlength="24" required />
+                    </label>
+                    <label class="create-field">
+                        <span>Nationality</span>
+                        <select id="createNationality" name="nationality"></select>
+                    </label>
+                    <label class="create-field">
+                        <span>Gender</span>
+                        <select id="createGender" name="gender" required>
+                            <option value="0">Male</option>
+                            <option value="1">Female</option>
+                        </select>
+                    </label>
+                    <label class="create-field">
+                        <span>Date of birth</span>
+                        <input type="date" id="createBirthdate" name="birthdate" required />
+                    </label>
+                    <footer class="create-actions">
+                        <button type="submit" id="createSubmitBtn" class="hbtn hbtn-primary">
+                            <span class="hbtn-label">Build Character</span>
+                        </button>
+                        <button type="button" id="createCancelBtn" class="hbtn hbtn-ghost">
+                            <span class="hbtn-label">Cancel</span>
+                            <kbd>Esc</kbd>
+                        </button>
+                    </footer>
+                </form>
+            </div>
+        </section>
+
+        <section id="skySpawnPanel" class="sky-panel hidden" aria-label="Spawn location">
+            <header class="sky-head">
+                <span class="sky-prefix">// W2F</span>
+                <h2 class="sky-title">Select Deployment Zone</h2>
+                <span class="sky-suffix">SECURE</span>
+            </header>
+            <div id="skySpawnGrid" class="sky-grid"></div>
+        </section>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
