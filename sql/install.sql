@@ -5,10 +5,13 @@
 -- Requires: MariaDB / MySQL 10.3+
 -- Also ensure oxmysql is configured in server.cfg before starting resources.
 --
--- ESX SERVERS: none of this file is required. es_extended's own install
--- provides the `users` table (characters + skins) that the ESX mode uses;
--- only the optional `w2f_multicharacter_log` table at the bottom applies if
--- you want the creation audit log.
+-- ESX SERVERS: none of this file is required to play. es_extended's own
+-- install provides the `users` table (characters + skins) that ESX mode uses.
+-- The only optionally-useful part for ESX is the `w2f_multicharacter_log`
+-- table (creation audit log). If you skip it the resource detects the missing
+-- table at startup and silently disables the audit log — no errors. To keep
+-- the audit log on ESX, run JUST the `w2f_multicharacter_log` CREATE TABLE
+-- statement below (the qbox tables are harmless but unnecessary on ESX).
 -- =============================================================================
 
 -- -----------------------------------------------------------------------------
