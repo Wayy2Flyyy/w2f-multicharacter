@@ -121,7 +121,7 @@ ESX Legacy is supported as an alternative framework. Characters are stored the s
    ensure w2f-multicharacter
    ```
 
-5. `sql/install.sql` is **not** required on ESX — es_extended's own `users` table is used for characters, skins (`users.skin`), and positions. Only the optional `w2f_multicharacter_log` audit table applies if you enable `Config.CharacterCreation.auditLog`.
+5. `sql/install.sql` is **not** required on ESX — es_extended's own `users` table is used for characters, skins (`users.skin`), and positions. The audit log (`Config.CharacterCreation.auditLog`, on by default) writes to the optional `w2f_multicharacter_log` table; if that table is absent the resource detects it at startup and silently disables the audit log (no errors). To keep the audit log, run just that one `CREATE TABLE` from `sql/install.sql`.
 
 ### ESX notes & limitations
 

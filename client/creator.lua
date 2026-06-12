@@ -372,7 +372,7 @@ function W2F.Creator.OpenAppearance(gender, coords, heading)
         W2F.Creator._appearanceRecover = appearanceRecover
         armAppearanceWatchdog()
 
-        exports['illenium-appearance']:startPlayerCustomization(function(appearance)
+        local function onIlleniumDone(appearance)
             --- FIRST: stop the watchdog + instant-recover hook so neither fires
             --- on the now-completed handoff.
             if W2F.Watchdog then W2F.Watchdog.Disarm('appearance') end
@@ -388,7 +388,24 @@ function W2F.Creator.OpenAppearance(gender, coords, heading)
                 lib.callback.await('w2f-multicharacter:server:cancelCreation', false)
                 W2F.Creator.ReturnToSelection(false)
             end
-        end, appearanceConfig)
+        end
+
+        --- Guard the export: illenium-appearance could stop between the
+        --- GetResourceState check above and this call, which would otherwise
+        --- throw an uncaught "No such export" and strand the player mid-create.
+        local started = pcall(function()
+            exports['illenium-appearance']:startPlayerCustomization(onIlleniumDone, appearanceConfig)
+        end)
+        if not started then
+            if W2F.Watchdog then W2F.Watchdog.Disarm('appearance') end
+            W2F.Creator._appearanceRecover = nil
+            pcall(function() TriggerServerEvent('illenium-appearance:server:ResetRoutingBucket') end)
+            teardownStreaming()
+            dbg('appearance save failure (illenium startPlayerCustomization export unavailable)')
+            W2F.Creator.HideMulticharUiForAppearance('appearance_export_failed')
+            lib.callback.await('w2f-multicharacter:server:cancelCreation', false)
+            W2F.Creator.ReturnToSelection(false)
+        end
         return
     end
 
